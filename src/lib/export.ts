@@ -1,4 +1,3 @@
-import JSZip from 'jszip'
 import type { StickyNoteData } from '@/types/note'
 import { deriveTitle } from '@/lib/note'
 import { formatDate, formatDateTime } from './datetime'
@@ -38,8 +37,9 @@ export function exportNote(note: StickyNoteData) {
   downloadBlob(noteFileName(note, new Set()), blob)
 }
 
-/** 全部便签打包为 zip（每张一个 .md，附清单 README） */
+/** 全部便签打包为 zip（每张一个 .md，附清单 README）；jszip 按需加载不进主包 */
 export async function exportAllNotes(notes: StickyNoteData[]) {
+  const { default: JSZip } = await import('jszip')
   const zip = new JSZip()
   const used = new Set<string>()
   const manifest: string[] = ['# MD 便签导出清单', '']

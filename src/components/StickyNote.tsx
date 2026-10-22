@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import { Calendar, Clock, CalendarClock, Eye, PencilLine, Check, Download, Pin } from 'lucide-react'
 import type { StickyNoteData } from '@/types/note'
 import { NOTE_COLORS, COLOR_ORDER, MIN_W, MIN_H } from '@/types/note'
@@ -35,7 +35,8 @@ interface Props {
   canvasRef?: React.RefObject<HTMLDivElement | null>
 }
 
-export function StickyNote({
+/** memo 化：单张便签的重渲染只由自身 props 驱动（拖动 / 其他便签更新不再全树重绘） */
+export const StickyNote = memo(function StickyNote({
   note,
   onUpdate,
   onDelete,
@@ -942,4 +943,4 @@ export function StickyNote({
       )}
     </div>
   )
-}
+})

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Pin, PinOff, Plus, Trash2 } from 'lucide-react'
 import type { StickyNoteData } from '@/types/note'
 import { NOTE_COLORS } from '@/types/note'
@@ -104,18 +104,22 @@ function TaskList({
   notes: StickyNoteData[]
   onSelect: (id: string) => void
 }) {
-  const rows = notes
-    .flatMap((note) =>
-      extractTasks(note.content)
-        .filter((t) => t.status === 'todo' || t.status === 'progress' || t.status === 'waiting')
-        .map((task) => ({ note, task })),
-    )
-    .sort((a, b) => {
-      if (a.task.due && b.task.due) return a.task.due.localeCompare(b.task.due)
-      if (a.task.due) return -1
-      if (b.task.due) return 1
-      return b.note.updatedAt - a.note.updatedAt
-    })
+  const rows = useMemo(
+    () =>
+      notes
+        .flatMap((note) =>
+          extractTasks(note.content)
+            .filter((t) => t.status === 'todo' || t.status === 'progress' || t.status === 'waiting')
+            .map((task) => ({ note, task })),
+        )
+        .sort((a, b) => {
+          if (a.task.due && b.task.due) return a.task.due.localeCompare(b.task.due)
+          if (a.task.due) return -1
+          if (b.task.due) return 1
+          return b.note.updatedAt - a.note.updatedAt
+        }),
+    [notes],
+  )
 
   if (rows.length === 0) {
     return <div className="px-3 py-6 text-center text-[12px] text-black/40">没有待办任务 🎉</div>
@@ -239,15 +243,19 @@ export function Sidebar({
   onRestore,
   onPermanentDelete,
 }: Props) {
-  const sorted = [...notes].sort((a, b) => b.updatedAt - a.updatedAt)
+  const sorted = useMemo(() => [...notes].sort((a, b) => b.updatedAt - a.updatedAt), [notes])
   const [tab, setTab] = useState<'notes' | 'tasks' | 'trash'>('notes')
-  const openTaskCount = notes.reduce(
-    (sum, n) =>
-      sum +
-      extractTasks(n.content).filter(
-        (t) => t.status === 'todo' || t.status === 'progress' || t.status === 'waiting',
-      ).length,
-    0,
+  const openTaskCount = useMemo(
+    () =>
+      notes.reduce(
+        (sum, n) =>
+          sum +
+          extractTasks(n.content).filter(
+            (t) => t.status === 'todo' || t.status === 'progress' || t.status === 'waiting',
+          ).length,
+        0,
+      ),
+    [notes],
   )
 
   const tabBtn = (active: boolean) =>
