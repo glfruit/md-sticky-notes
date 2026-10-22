@@ -253,7 +253,7 @@ export function cleanupMarkdown(content: string): CleanupResult {
 
 export type TaskStatus = 'todo' | 'progress' | 'waiting' | 'done' | 'cancelled'
 
-const TASK_LINE_RE = /^(\s*[-*+]\s+\[)([ xX/?\-])(\])/
+const TASK_LINE_RE = /^(\s*[-*+]\s+\[)([ xX/?-])(\])/
 
 const MARK_TO_STATUS: Record<string, TaskStatus> = {
   ' ': 'todo',

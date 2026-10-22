@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Search, FileText } from 'lucide-react'
 import type { StickyNoteData } from '@/types/note'
 import { NOTE_COLORS } from '@/types/note'
-import { deriveTitle } from './StickyNote'
+import { deriveTitle } from '@/lib/note'
 
 export interface SearchJump {
   noteId: string
@@ -69,8 +69,6 @@ export function SearchPanel({ notes, onJump, onClose }: Props) {
     [notes, query],
   )
 
-  useEffect(() => setActive(0), [query])
-
   const jump = (m: NoteMatch) => {
     onJump({ noteId: m.note.id, start: m.firstStart, end: m.firstEnd })
   }
@@ -107,7 +105,10 @@ export function SearchPanel({ notes, onJump, onClose }: Props) {
             className="flex-1 bg-transparent outline-none text-[15px] placeholder:text-black/30"
             placeholder="搜索所有便签…"
             value={query}
-            onChange={(e) => setQuery(e.target.value)}
+            onChange={(e) => {
+              setQuery(e.target.value)
+              setActive(0)
+            }}
             onKeyDown={handleKey}
           />
           <kbd className="text-[10px] text-black/35 border border-black/15 rounded px-1 py-0.5">Esc</kbd>

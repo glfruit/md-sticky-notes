@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Pin, PinOff, Plus, Trash2 } from 'lucide-react'
 import type { StickyNoteData } from '@/types/note'
 import { NOTE_COLORS } from '@/types/note'
-import { deriveTitle } from './StickyNote'
+import { deriveTitle } from '@/lib/note'
 import { formatUpdatedAt } from '@/lib/datetime'
 import { extractTasks, TASK_STATUS_META, dueUrgency, DUE_LEVEL_COLORS } from '@/lib/editor'
 
@@ -20,11 +20,13 @@ interface Props {
   onPermanentDelete: (id: string) => void
 }
 
-/** 去掉 markdown 符号的纯文本摘要 */
+/** 去掉 markdown 符号的纯文本摘要（保留正文标点，如日期里的连字符） */
 function snippet(content: string): string {
   const text = content
     .replace(/<\/?span[^>]*>/g, '')
-    .replace(/[#*`_>~|\[\]()!-]/g, '')
+    .replace(/^#{1,6}\s+/gm, '')
+    .replace(/^(\s*[-*+]\s+)?(\[[ xX/?-]\]\s*)?/gm, '')
+    .replace(/[*_`~>|]+/g, '')
     .replace(/\s+/g, ' ')
     .trim()
   return text.slice(0, 40) || '空白便签'

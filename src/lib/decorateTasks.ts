@@ -48,7 +48,7 @@ export function decorateTasks(html: string): string {
     const textNode = firstOwnTextNode(li)
     if (!textNode) return
     const text = textNode.textContent ?? ''
-    const m = text.match(/^\[([/?\-])\]\s*/)
+    const m = text.match(/^\[([/?-])\]\s*/)
     if (!m) return
     const status = TEXT_MARKERS[m[1]]
     if (!status) return

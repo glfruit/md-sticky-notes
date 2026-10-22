@@ -1,9 +1,9 @@
 [package]
 name = "app"
 version = "0.1.0"
-description = "A Tauri App"
-authors = ["you"]
-license = ""
+description = "MD 便签 — Markdown 增强的桌面便签应用"
+authors = ["glfruit"]
+license = "MIT"
 repository = ""
 edition = "2024"
 rust-version = "1.90"

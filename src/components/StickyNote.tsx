@@ -3,6 +3,7 @@ import { Calendar, Clock, CalendarClock, Eye, PencilLine, Check, Download, Pin }
 import type { StickyNoteData } from '@/types/note'
 import { NOTE_COLORS, COLOR_ORDER, MIN_W, MIN_H } from '@/types/note'
 import { formatDate, formatTime, formatDateTime, formatUpdatedAt } from '@/lib/datetime'
+import { deriveTitle } from '@/lib/note'
 import { exportNote } from '@/lib/export'
 import { saveAttachment, attachmentUrl } from '@/lib/attachments'
 import { htmlTableToMarkdown, tsvToMarkdown } from '@/lib/tablePaste'
@@ -32,16 +33,6 @@ interface Props {
   scrollRef?: React.RefObject<HTMLDivElement | null>
   /** 滚动画布：便签拖出视口时撑大内容区 */
   canvasRef?: React.RefObject<HTMLDivElement | null>
-}
-
-/** 从内容推导标题：第一行非空文本，去掉 markdown 标记 */
-export function deriveTitle(content: string): string {
-  const line = content.split('\n').find((l) => l.trim()) ?? ''
-  const clean = line
-    .replace(/^#{1,6}\s+/, '')
-    .replace(/[*_`~>\[\]-]/g, '')
-    .trim()
-  return clean.slice(0, 24) || '新建便签'
 }
 
 export function StickyNote({
@@ -628,6 +619,8 @@ export function StickyNote({
       window.addEventListener('pointerup', onUp)
       sc?.addEventListener('scroll', onScroll)
     },
+    // 故意不依赖 note.x/note.y：抓取偏移在拖动开始时锁定，拖动中不受便签位置更新影响
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [note.id, note.width, note.height, snapTargets, scrollRef, canvasRef, onUpdate, onFocus],
   )
 

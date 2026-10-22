@@ -1,6 +1,6 @@
 import JSZip from 'jszip'
 import type { StickyNoteData } from '@/types/note'
-import { deriveTitle } from '@/components/StickyNote'
+import { deriveTitle } from '@/lib/note'
 import { formatDate, formatDateTime } from './datetime'
 
 function downloadBlob(filename: string, blob: Blob) {
@@ -21,7 +21,7 @@ function safeName(title: string): string {
 }
 
 function noteFileName(note: StickyNoteData, used: Set<string>): string {
-  let base = safeName(deriveTitle(note.content))
+  const base = safeName(deriveTitle(note.content))
   let name = `${base}.md`
   let i = 2
   while (used.has(name)) {
