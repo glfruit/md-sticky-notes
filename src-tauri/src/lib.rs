@@ -40,11 +40,27 @@ fn list_notes(folder: String) -> Result<Vec<(String, String)>, String> {
     Ok(out)
 }
 
+/// 原子写文件：先写同目录 `<name>.tmp` 再 rename，避免崩溃 / 断电留下半份文件
+/// （同步文件夹场景下半份文件会被云盘扩散覆盖其他机器的好版本）
+fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), String> {
+    let mut tmp_name = path
+        .file_name()
+        .map(|s| s.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    tmp_name.push_str(".tmp");
+    let tmp = path.with_file_name(tmp_name);
+    fs::write(&tmp, bytes).map_err(|e| e.to_string())?;
+    fs::rename(&tmp, path).map_err(|e| {
+        let _ = fs::remove_file(&tmp);
+        e.to_string()
+    })
+}
+
 #[tauri::command]
 fn write_note(folder: String, id: String, text: String) -> Result<(), String> {
     fs::create_dir_all(&folder).map_err(|e| e.to_string())?;
     let safe = id.replace(['/', '\\'], "_");
-    fs::write(Path::new(&folder).join(format!("{safe}.md")), text).map_err(|e| e.to_string())
+    atomic_write(&Path::new(&folder).join(format!("{safe}.md")), text.as_bytes())
 }
 
 #[tauri::command]
@@ -62,7 +78,7 @@ fn write_attachment(folder: String, name: String, bytes: Vec<u8>) -> Result<(), 
     let dir = Path::new(&folder).join("attachments");
     fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let safe = name.replace(['/', '\\'], "_");
-    fs::write(dir.join(safe), bytes).map_err(|e| e.to_string())
+    atomic_write(&dir.join(safe), &bytes)
 }
 
 #[tauri::command]

@@ -26,8 +26,12 @@ interface Props {
   reveal?: RevealTarget | null
   /** 侧栏选中后高亮闪烁 */
   flashing?: boolean
-  /** 其他便签的几何信息（拖动吸附用） */
-  snapTargets?: { x: number; y: number; width: number; height: number }[]
+  /** 全部便签的几何信息（拖动吸附用，内部排除自身） */
+  snapTargets?: { id: string; x: number; y: number; width: number; height: number }[]
+  /** 桌面滚动层：拖动坐标换算 / 边缘自动滚动 */
+  scrollRef?: React.RefObject<HTMLDivElement | null>
+  /** 滚动画布：便签拖出视口时撑大内容区 */
+  canvasRef?: React.RefObject<HTMLDivElement | null>
 }
 
 /** 从内容推导标题：第一行非空文本，去掉 markdown 标记 */
@@ -40,7 +44,17 @@ export function deriveTitle(content: string): string {
   return clean.slice(0, 24) || '新建便签'
 }
 
-export function StickyNote({ note, onUpdate, onDelete, onFocus, reveal, flashing, snapTargets }: Props) {
+export function StickyNote({
+  note,
+  onUpdate,
+  onDelete,
+  onFocus,
+  reveal,
+  flashing,
+  snapTargets,
+  scrollRef,
+  canvasRef,
+}: Props) {
   const colors = NOTE_COLORS[note.color]
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const rootRef = useRef<HTMLDivElement>(null)
@@ -52,7 +66,7 @@ export function StickyNote({ note, onUpdate, onDelete, onFocus, reveal, flashing
   const [maximized, setMaximized] = useState(false)
   const prevGeometry = useRef<{ x: number; y: number; width: number; height: number } | null>(null)
 
-  // 绿点：最大化 / 还原（macOS 语义）
+  // 绿点：最大化 / 还原（macOS 语义）；坐标为滚动画布内容坐标（菜单栏下方）
   const toggleMaximize = useCallback(() => {
     if (maximized) {
       if (prevGeometry.current) onUpdate(note.id, { ...prevGeometry.current })
@@ -61,7 +75,7 @@ export function StickyNote({ note, onUpdate, onDelete, onFocus, reveal, flashing
       prevGeometry.current = { x: note.x, y: note.y, width: note.width, height: note.height }
       onUpdate(note.id, {
         x: 16,
-        y: 44,
+        y: 16,
         width: window.innerWidth - 32,
         height: window.innerHeight - 60,
         collapsed: false,
@@ -267,18 +281,23 @@ export function StickyNote({ note, onUpdate, onDelete, onFocus, reveal, flashing
   }, [confirmDelete])
 
   // 编辑模式下点击窗口外（其它便签或空白区域）→ 自动切回预览（含语法清理）
-  // 空白便签保持编辑模式，方便继续输入
+  // 空白便签保持编辑模式，方便继续输入；点滚动条不算离开
   useEffect(() => {
     if (note.preview || note.collapsed) return
     const onDown = (e: PointerEvent) => {
       const root = rootRef.current
-      if (root && !root.contains(e.target as Node) && note.content.trim()) {
+      if (
+        root &&
+        !root.contains(e.target as Node) &&
+        e.target !== scrollRef?.current &&
+        note.content.trim()
+      ) {
         switchToPreview()
       }
     }
     window.addEventListener('pointerdown', onDown, true)
     return () => window.removeEventListener('pointerdown', onDown, true)
-  }, [note.preview, note.collapsed, note.content, switchToPreview])
+  }, [note.preview, note.collapsed, note.content, switchToPreview, scrollRef])
 
   const insertText = useCallback(
     (text: string, padSpaces = true) => {
@@ -501,14 +520,28 @@ export function StickyNote({ note, onUpdate, onDelete, onFocus, reveal, flashing
     [insertDate, insertTime, insertDateTime, applyEdit, switchToPreview, note.id, note.content, note.preview, onUpdate],
   )
 
-  // 拖动窗口（带吸附对齐：其他便签边缘 + 屏幕边缘）
+  // 拖动窗口（带吸附对齐：其他便签边缘 + 视口边缘）
+  // 拖动过程直写 DOM 不走 React 渲染；坐标为滚动画布的内容坐标，
+  // 便签拖出视口时撑大画布（滚动条出现），指针贴近边缘时自动滚动
   const startDrag = useCallback(
     (e: React.PointerEvent) => {
       if ((e.target as HTMLElement).closest('button')) return
       e.preventDefault()
       onFocus(note.id)
-      const startX = e.clientX - note.x
-      const startY = e.clientY - note.y
+      const root = rootRef.current
+      const sc = scrollRef?.current
+      if (!root) return
+      const rect = sc?.getBoundingClientRect()
+      const layerLeft = rect?.left ?? 0
+      const layerTop = rect?.top ?? 0
+      // 抓取点在便签内的偏移（内容坐标，拖动期间恒定）
+      const offsetX = e.clientX - layerLeft + (sc?.scrollLeft ?? 0) - note.x
+      const offsetY = e.clientY - layerTop + (sc?.scrollTop ?? 0) - note.y
+      let pointerX = e.clientX
+      let pointerY = e.clientY
+      let x = note.x
+      let y = note.y
+
       const SNAP = 8
       const snap = (v: number, candidates: number[]): number => {
         let best = v
@@ -522,50 +555,107 @@ export function StickyNote({ note, onUpdate, onDelete, onFocus, reveal, flashing
         }
         return best
       }
-      const onMove = (ev: PointerEvent) => {
-        let x = Math.min(Math.max(ev.clientX - startX, -note.width + 80), window.innerWidth - 80)
-        let y = Math.min(Math.max(ev.clientY - startY, 28), window.innerHeight - 40)
-        if (snapTargets && snapTargets.length > 0) {
-          const xs: number[] = [16, window.innerWidth - 16 - note.width]
-          const ys: number[] = [36, window.innerHeight - 16 - note.height]
-          for (const b of snapTargets) {
+      const targets = (snapTargets ?? []).filter((t) => t.id !== note.id)
+
+      const apply = () => {
+        if (sc) {
+          x = pointerX - layerLeft + sc.scrollLeft - offsetX
+          y = pointerY - layerTop + sc.scrollTop - offsetY
+        } else {
+          x = pointerX - offsetX
+          y = pointerY - offsetY
+        }
+        x = Math.max(0, x)
+        y = Math.max(0, y)
+        if (targets.length > 0 && sc) {
+          // 视口边缘（随滚动位置换算）+ 其他便签边缘
+          const vw = sc.clientWidth
+          const vh = sc.clientHeight
+          const xs: number[] = [sc.scrollLeft + 16, sc.scrollLeft + vw - 16 - note.width]
+          const ys: number[] = [sc.scrollTop + 16, sc.scrollTop + vh - 16 - note.height]
+          for (const b of targets) {
             xs.push(b.x, b.x + b.width, b.x + b.width - note.width)
             ys.push(b.y, b.y + b.height, b.y + b.height - note.height)
           }
           x = snap(x, xs)
           y = snap(y, ys)
         }
-        onUpdate(note.id, { x, y })
+        root.style.left = `${x}px`
+        root.style.top = `${y}px`
+        // 便签拖出当前画布时直接撑大（pointerup 后由 React 状态接管尺寸）
+        const canvas = canvasRef?.current
+        if (canvas) {
+          const needW = x + note.width + 24
+          const needH = y + note.height + 24
+          if (needW > canvas.offsetWidth) canvas.style.width = `${needW}px`
+          if (needH > canvas.offsetHeight) canvas.style.height = `${needH}px`
+        }
       }
+
+      // 边缘自动滚动：指针贴近可视边缘时持续滚动，便签跟随指针
+      const EDGE = 28
+      const SPEED = 14
+      let raf = 0
+      const tick = () => {
+        if (sc) {
+          const dx = pointerX - layerLeft
+          const dy = pointerY - layerTop
+          if (dx < EDGE) sc.scrollLeft -= SPEED
+          else if (dx > sc.clientWidth - EDGE) sc.scrollLeft += SPEED
+          if (dy < EDGE) sc.scrollTop -= SPEED
+          else if (dy > sc.clientHeight - EDGE) sc.scrollTop += SPEED
+        }
+        apply()
+        raf = requestAnimationFrame(tick)
+      }
+      raf = requestAnimationFrame(tick)
+
+      const onMove = (ev: PointerEvent) => {
+        pointerX = ev.clientX
+        pointerY = ev.clientY
+        apply()
+      }
+      const onScroll = () => apply()
       const onUp = () => {
+        cancelAnimationFrame(raf)
         window.removeEventListener('pointermove', onMove)
         window.removeEventListener('pointerup', onUp)
+        sc?.removeEventListener('scroll', onScroll)
+        // 一次性提交最终位置（唯一一次状态更新 + 落盘）
+        onUpdate(note.id, { x, y })
       }
       window.addEventListener('pointermove', onMove)
       window.addEventListener('pointerup', onUp)
+      sc?.addEventListener('scroll', onScroll)
     },
-    [note.id, note.x, note.y, note.width, note.height, snapTargets, onUpdate, onFocus],
+    [note.id, note.width, note.height, snapTargets, scrollRef, canvasRef, onUpdate, onFocus],
   )
 
-  // 调整大小
+  // 调整大小（拖动过程直写 DOM，pointerup 一次提交）
   const startResize = useCallback(
     (e: React.PointerEvent) => {
       e.preventDefault()
       e.stopPropagation()
       onFocus(note.id)
+      const root = rootRef.current
       const startX = e.clientX
       const startY = e.clientY
       const startW = note.width
       const startH = note.height
+      let w = startW
+      let h = startH
       const onMove = (ev: PointerEvent) => {
-        onUpdate(note.id, {
-          width: Math.max(MIN_W, startW + ev.clientX - startX),
-          height: Math.max(MIN_H, startH + ev.clientY - startY),
-        })
+        w = Math.max(MIN_W, startW + ev.clientX - startX)
+        h = Math.max(MIN_H, startH + ev.clientY - startY)
+        if (root) {
+          root.style.width = `${w}px`
+          root.style.height = `${h}px`
+        }
       }
       const onUp = () => {
         window.removeEventListener('pointermove', onMove)
         window.removeEventListener('pointerup', onUp)
+        onUpdate(note.id, { width: w, height: h })
       }
       window.addEventListener('pointermove', onMove)
       window.addEventListener('pointerup', onUp)
@@ -584,7 +674,8 @@ export function StickyNote({ note, onUpdate, onDelete, onFocus, reveal, flashing
         top: note.y,
         width: note.width,
         height: note.collapsed ? 'auto' : note.height,
-        zIndex: note.pinned ? 10000 + note.z : note.z,
+        // 置顶段 9000+：浮在其他便签之上，但低于侧栏(9998)/菜单栏(9999)/弹层(10000)
+        zIndex: note.pinned ? 9000 + note.z : note.z,
         backgroundColor: note.translucent ? `${colors.bg}b3` : colors.bg,
         backdropFilter: note.translucent ? 'blur(14px)' : undefined,
         border: `1px solid ${colors.border}`,
