@@ -42,12 +42,16 @@ export default function App() {
   useReminders(notes)
 
   // 全局热键 / 托盘「新建便签」：监听后端事件，剪贴板文本自动预填
+  // （可在「同步」设置里关闭——剪贴板可能刚复制过密码，不希望落进同步文件）
   useEffect(() => {
     if (!isTauri()) return
     let unlisten: (() => void) | undefined
     void import('@tauri-apps/api/event').then(({ listen }) =>
       listen<string>('quick-new-note', (e) => {
-        addNote(typeof e.payload === 'string' ? e.payload : '')
+        const prefill =
+          localStorage.getItem('md-sticky-notes:clipboard-prefill') !== '0' &&
+          typeof e.payload === 'string'
+        addNote(prefill ? (e.payload as string) : '')
       }).then((fn) => {
         unlisten = fn
       }),

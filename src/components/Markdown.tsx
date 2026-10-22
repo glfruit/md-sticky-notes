@@ -1,9 +1,21 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { marked } from 'marked'
+import { markedHighlight } from 'marked-highlight'
+import hljs from 'highlight.js/lib/common'
+import 'highlight.js/styles/github-dark.css'
 import DOMPurify from 'dompurify'
 import { getAttachmentUrl, attachmentId } from '@/lib/attachments'
 import { decorateTasks } from '@/lib/decorateTasks'
 
+marked.use(
+  markedHighlight({
+    langPrefix: 'hljs language-',
+    highlight(code, lang) {
+      const language = lang && hljs.getLanguage(lang) ? lang : 'plaintext'
+      return hljs.highlight(code, { language }).value
+    },
+  }),
+)
 marked.setOptions({ gfm: true, breaks: true })
 
 export function Markdown({ source }: { source: string }) {
@@ -14,7 +26,7 @@ export function Markdown({ source }: { source: string }) {
     return DOMPurify.sanitize(raw, {
       ADD_TAGS: ['input'],
       // 不保留 disabled：复选框在预览里可点击，勾选状态由点击处理写回源码
-      ADD_ATTR: ['checked', 'type'],
+      ADD_ATTR: ['checked', 'type', 'class'],
       // 在默认协议白名单基础上放行 attachment:// 本地图片引用
       ALLOWED_URI_REGEXP: /^(?:(?:https?|mailto|tel|ftp|attachment):|[^a-z]|[a-z+.-]+(?:[^a-z+.\-:]|$))/i,
     })

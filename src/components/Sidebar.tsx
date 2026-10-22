@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Pin, PinOff, Plus, Trash2 } from 'lucide-react'
 import type { StickyNoteData } from '@/types/note'
 import { NOTE_COLORS } from '@/types/note'
-import { deriveTitle } from '@/lib/note'
+import { deriveTitle, extractTags } from '@/lib/note'
 import { formatUpdatedAt } from '@/lib/datetime'
 import { extractTasks, TASK_STATUS_META, dueUrgency, DUE_LEVEL_COLORS } from '@/lib/editor'
 
@@ -245,6 +245,22 @@ export function Sidebar({
 }: Props) {
   const sorted = useMemo(() => [...notes].sort((a, b) => b.updatedAt - a.updatedAt), [notes])
   const [tab, setTab] = useState<'notes' | 'tasks' | 'trash'>('notes')
+  const [tagFilter, setTagFilter] = useState<string | null>(null)
+  // 标签 → 便签数（用于「便签」页签顶部的筛选 chip 行）
+  const tagCounts = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const n of notes) {
+      for (const t of extractTags(n.content)) counts.set(t, (counts.get(t) ?? 0) + 1)
+    }
+    return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+  }, [notes])
+  const visibleNotes = useMemo(
+    () =>
+      tagFilter === null
+        ? sorted
+        : sorted.filter((n) => extractTags(n.content).includes(tagFilter)),
+    [sorted, tagFilter],
+  )
   const openTaskCount = useMemo(
     () =>
       notes.reduce(
@@ -299,10 +315,39 @@ export function Sidebar({
       <div className="flex-1 overflow-y-auto py-1">
         {tab === 'notes' && (
           <>
-            {sorted.length === 0 && (
-              <div className="px-3 py-6 text-center text-[12px] text-black/40">还没有便签</div>
+            {tagCounts.length > 0 && (
+              <div className="flex flex-wrap gap-1 px-3 pt-1.5 pb-1 border-b border-black/5">
+                <button
+                  className={`px-1.5 h-[19px] rounded-full text-[10.5px] transition-colors ${
+                    tagFilter === null
+                      ? 'bg-blue-500/15 text-blue-700 font-medium'
+                      : 'text-black/45 hover:bg-black/5'
+                  }`}
+                  onClick={() => setTagFilter(null)}
+                >
+                  全部 {notes.length}
+                </button>
+                {tagCounts.map(([tag, count]) => (
+                  <button
+                    key={tag}
+                    className={`px-1.5 h-[19px] rounded-full text-[10.5px] transition-colors ${
+                      tagFilter === tag
+                        ? 'bg-blue-500/15 text-blue-700 font-medium'
+                        : 'text-black/45 hover:bg-black/5'
+                    }`}
+                    onClick={() => setTagFilter(tagFilter === tag ? null : tag)}
+                  >
+                    #{tag} {count}
+                  </button>
+                ))}
+              </div>
             )}
-            {sorted.map((note) => (
+            {visibleNotes.length === 0 && (
+              <div className="px-3 py-6 text-center text-[12px] text-black/40">
+                {tagFilter !== null ? `没有带 #${tagFilter} 标签的便签` : '还没有便签'}
+              </div>
+            )}
+            {visibleNotes.map((note) => (
               <NoteRow key={note.id} note={note} onSelect={onSelect} onDelete={onDelete} />
             ))}
           </>

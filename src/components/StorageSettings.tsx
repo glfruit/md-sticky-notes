@@ -2,6 +2,8 @@ import { useState } from 'react'
 import { FolderOpen, HardDrive, Cloud, X, BrushCleaning } from 'lucide-react'
 import { isTauri, getFolder, pickFolder } from '@/lib/storage'
 
+const PREFILL_KEY = 'md-sticky-notes:clipboard-prefill'
+
 interface Props {
   onClose: () => void
   /** 切换同步文件夹（flush 旧文件夹 → 全量重载新文件夹） */
@@ -15,7 +17,15 @@ export function StorageSettings({ onClose, onSwitchFolder, onCleanAttachments }:
   const [busy, setBusy] = useState(false)
   const [cleaning, setCleaning] = useState(false)
   const [cleanResult, setCleanResult] = useState<string | null>(null)
+  const [clipboardPrefill, setClipboardPrefill] = useState(
+    () => localStorage.getItem(PREFILL_KEY) !== '0',
+  )
   const folder = getFolder()
+
+  const togglePrefill = (on: boolean) => {
+    setClipboardPrefill(on)
+    localStorage.setItem(PREFILL_KEY, on ? '1' : '0')
+  }
 
   const changeFolder = async () => {
     setBusy(true)
@@ -84,6 +94,21 @@ export function StorageSettings({ onClose, onSwitchFolder, onCleanAttachments }:
             {cleanResult && (
               <div className="mt-2 text-[11px] text-black/50">{cleanResult}</div>
             )}
+            <div className="mt-3 pt-2.5 border-t border-black/10 flex items-start gap-2">
+              <input
+                id="clipboard-prefill"
+                type="checkbox"
+                className="mt-0.5 accent-blue-500"
+                checked={clipboardPrefill}
+                onChange={(e) => togglePrefill(e.target.checked)}
+              />
+              <label htmlFor="clipboard-prefill" className="text-[12px] leading-relaxed text-black/60 cursor-pointer">
+                全局热键新建便签时<strong>自动预填剪贴板内容</strong>
+                <span className="block text-[11px] text-black/40">
+                  方便随手收藏复制的文字；注意剪贴板若含敏感信息（如密码）会被写进同步文件夹
+                </span>
+              </label>
+            </div>
             <div className="mt-3 text-[11px] leading-relaxed text-black/45">
               把这个文件夹放在云盘同步目录里（默认已选 Dropbox，可换成 iCloud Drive、坚果云等），
               另一台机器装同一个应用并指向同一文件夹即可同步。

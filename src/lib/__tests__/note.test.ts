@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { deriveTitle } from '../note'
+import { deriveTitle, extractTags } from '../note'
 
 describe('deriveTitle 标题推导', () => {
   it('取第一行非空文本并去 Markdown 标记', () => {
@@ -25,5 +25,28 @@ describe('deriveTitle 标题推导', () => {
     expect(deriveTitle('a'.repeat(40))).toHaveLength(24)
     expect(deriveTitle('')).toBe('新建便签')
     expect(deriveTitle('   \n  ')).toBe('新建便签')
+  })
+})
+
+describe('extractTags 标签提取', () => {
+  it('提取中英文标签并去重', () => {
+    expect(extractTags('#工作 周报 #work #工作')).toEqual(['工作', 'work'])
+  })
+
+  it('跳过代码块内的标签', () => {
+    expect(extractTags('#真标签\n```\n#假标签\n```\n正文')).toEqual(['真标签'])
+  })
+
+  it('标题与链接锚点不误判', () => {
+    expect(extractTags('# 一级标题（# 后有空格）')).toEqual([])
+    expect(extractTags('见[附录](#anchor)')).toEqual([])
+  })
+
+  it('行中标签要求前面是空白', () => {
+    expect(extractTags('价值#不是标签 #是标签')).toEqual(['是标签'])
+  })
+
+  it('无标签返回空数组', () => {
+    expect(extractTags('普通内容')).toEqual([])
   })
 })

@@ -18,20 +18,26 @@ function loadNotified(): Set<string> {
 /**
  * 到点系统通知（桌面版）：每 30 秒扫描所有未完成任务，
  * 任务里写了时间（15:30 / 2026-10-25 / 2026-10-25 09:30）到点即弹系统通知。
+ * 去重 key 用「便签 id + 任务文本 + 时间戳」——任务序号会随列表增删漂移，不可靠。
  */
 export function useReminders(notes: StickyNoteData[]) {
   useEffect(() => {
     if (!isTauri()) return
+    // 权限每个会话只请求一次，之后沿用结果
+    let permission: boolean | null = null
 
     const check = async () => {
       const { isPermissionGranted, requestPermission, sendNotification } = await import(
         '@tauri-apps/plugin-notification'
       )
-      let granted = await isPermissionGranted()
-      if (!granted) {
-        granted = (await requestPermission()) === 'granted'
+      if (permission === null) {
+        let granted = await isPermissionGranted()
+        if (!granted) {
+          granted = (await requestPermission()) === 'granted'
+        }
+        permission = granted
       }
-      if (!granted) return
+      if (!permission) return
 
       const notified = loadNotified()
       const now = Date.now()
@@ -42,7 +48,7 @@ export function useReminders(notes: StickyNoteData[]) {
           const ts = extractTaskTime(task.text)
           if (ts === null) continue
           if (now >= ts && now - ts < FIRE_WINDOW_MS) {
-            const key = `${note.id}:${task.index}:${ts}`
+            const key = `${note.id}:${task.text}:${ts}`
             if (!notified.has(key)) {
               notified.add(key)
               changed = true
