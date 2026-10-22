@@ -1,11 +1,47 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { marked } from 'marked'
 import { markedHighlight } from 'marked-highlight'
-import hljs from 'highlight.js/lib/common'
+import hljs from 'highlight.js/lib/core'
+import javascript from 'highlight.js/lib/languages/javascript'
+import typescript from 'highlight.js/lib/languages/typescript'
+import json from 'highlight.js/lib/languages/json'
+import bash from 'highlight.js/lib/languages/bash'
+import python from 'highlight.js/lib/languages/python'
+import rust from 'highlight.js/lib/languages/rust'
+import css from 'highlight.js/lib/languages/css'
+import xml from 'highlight.js/lib/languages/xml'
+import markdown from 'highlight.js/lib/languages/markdown'
+import sql from 'highlight.js/lib/languages/sql'
+import yaml from 'highlight.js/lib/languages/yaml'
+import java from 'highlight.js/lib/languages/java'
+import go from 'highlight.js/lib/languages/go'
+import c from 'highlight.js/lib/languages/c'
+import cpp from 'highlight.js/lib/languages/cpp'
 import 'highlight.js/styles/github-dark.css'
 import DOMPurify from 'dompurify'
 import { getAttachmentUrl, attachmentId } from '@/lib/attachments'
 import { decorateTasks } from '@/lib/decorateTasks'
+
+// 按需注册常用语言（lib/common 全量会多打包 ~170KB）
+for (const [name, lang] of Object.entries({
+  javascript,
+  typescript,
+  json,
+  bash,
+  python,
+  rust,
+  css,
+  xml,
+  markdown,
+  sql,
+  yaml,
+  java,
+  go,
+  c,
+  cpp,
+})) {
+  hljs.registerLanguage(name, lang)
+}
 
 marked.use(
   markedHighlight({
