@@ -36,6 +36,8 @@ export async function initStorage(): Promise<void> {
     localStorage.setItem(FOLDER_KEY, folderPath)
   }
   adapter = makeFolderAdapter(folderPath, tauriInvoke)
+  // 文件夹变更监听（另一台机器 / 云盘客户端改动了便签 → 通知前端重载）
+  await invoke('watch_folder', { folder: folderPath }).catch(() => {})
 }
 
 /** 切换同步文件夹（Tauri only） */
@@ -44,6 +46,7 @@ export async function setFolder(path: string): Promise<void> {
   folderPath = path
   localStorage.setItem(FOLDER_KEY, path)
   adapter = makeFolderAdapter(path, tauriInvoke)
+  await tauriInvoke('watch_folder', { folder: path }).catch(() => {})
 }
 
 /** 弹出系统文件夹选择器，返回选择的路径（取消返回 null） */

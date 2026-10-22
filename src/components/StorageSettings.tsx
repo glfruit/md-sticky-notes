@@ -1,15 +1,20 @@
 import { useState } from 'react'
-import { FolderOpen, HardDrive, Cloud, X } from 'lucide-react'
-import { isTauri, getFolder, pickFolder, setFolder } from '@/lib/storage'
+import { FolderOpen, HardDrive, Cloud, X, BrushCleaning } from 'lucide-react'
+import { isTauri, getFolder, pickFolder } from '@/lib/storage'
 
 interface Props {
   onClose: () => void
-  onFolderChanged: () => void
+  /** 切换同步文件夹（flush 旧文件夹 → 全量重载新文件夹） */
+  onSwitchFolder: (path: string) => Promise<void>
+  /** 清理未被引用的附件，返回删除数量 */
+  onCleanAttachments: () => Promise<number>
 }
 
 /** 存储位置设置面板（桌面版可选同步文件夹，默认 Dropbox） */
-export function StorageSettings({ onClose, onFolderChanged }: Props) {
+export function StorageSettings({ onClose, onSwitchFolder, onCleanAttachments }: Props) {
   const [busy, setBusy] = useState(false)
+  const [cleaning, setCleaning] = useState(false)
+  const [cleanResult, setCleanResult] = useState<string | null>(null)
   const folder = getFolder()
 
   const changeFolder = async () => {
@@ -17,11 +22,23 @@ export function StorageSettings({ onClose, onFolderChanged }: Props) {
     try {
       const picked = await pickFolder()
       if (picked) {
-        await setFolder(picked)
-        onFolderChanged()
+        await onSwitchFolder(picked)
       }
     } finally {
       setBusy(false)
+    }
+  }
+
+  const cleanAttachments = async () => {
+    setCleaning(true)
+    setCleanResult(null)
+    try {
+      const removed = await onCleanAttachments()
+      setCleanResult(removed > 0 ? `已清理 ${removed} 张未引用图片` : '没有需要清理的图片')
+    } catch {
+      setCleanResult('清理失败，请稍后再试')
+    } finally {
+      setCleaning(false)
     }
   }
 
@@ -46,17 +63,31 @@ export function StorageSettings({ onClose, onFolderChanged }: Props) {
               <FolderOpen size={14} className="text-black/50 shrink-0" />
               <span className="flex-1 text-[12px] text-black/75 truncate font-mono">{folder}</span>
             </div>
-            <button
-              className="mt-2.5 w-full h-8 rounded-lg bg-blue-500 hover:bg-blue-600 text-white text-[13px] disabled:opacity-50"
-              onClick={changeFolder}
-              disabled={busy}
-            >
-              {busy ? '选择中…' : '更换同步文件夹…'}
-            </button>
+            <div className="flex gap-2 mt-2.5">
+              <button
+                className="flex-1 h-8 rounded-lg bg-blue-500 hover:bg-blue-600 text-white text-[13px] disabled:opacity-50"
+                onClick={changeFolder}
+                disabled={busy || cleaning}
+              >
+                {busy ? '选择中…' : '更换同步文件夹…'}
+              </button>
+              <button
+                className="flex items-center justify-center gap-1.5 h-8 px-3 rounded-lg bg-black/5 hover:bg-black/10 text-black/70 text-[13px] disabled:opacity-50"
+                onClick={() => void cleanAttachments()}
+                disabled={busy || cleaning}
+                title="删除未被任何便签引用的图片文件"
+              >
+                <BrushCleaning size={14} />
+                {cleaning ? '清理中…' : '清理图片'}
+              </button>
+            </div>
+            {cleanResult && (
+              <div className="mt-2 text-[11px] text-black/50">{cleanResult}</div>
+            )}
             <div className="mt-3 text-[11px] leading-relaxed text-black/45">
               把这个文件夹放在云盘同步目录里（默认已选 Dropbox，可换成 iCloud Drive、坚果云等），
               另一台机器装同一个应用并指向同一文件夹即可同步。
-              窗口重新获得焦点时会自动拉取其他机器的改动。
+              文件夹里的改动会实时同步进来（另一台机器编辑、云盘拉取完成都会自动刷新）。
             </div>
           </>
         ) : (

@@ -33,17 +33,36 @@ export function makeFolderAdapter(folder: string, invoke: Invoke): StorageAdapte
     },
 
     async saveAttachment(blob, id) {
+      // base64 传输：大图走 JSON 数字数组会产生百万元素数组，极慢
       const buf = new Uint8Array(await blob.arrayBuffer())
-      await invoke('write_attachment', { folder, name: id, bytes: Array.from(buf) })
+      let bin = ''
+      const CHUNK = 0x8000
+      for (let i = 0; i < buf.length; i += CHUNK) {
+        bin += String.fromCharCode(...buf.subarray(i, i + CHUNK))
+      }
+      await invoke('write_attachment', { folder, name: id, dataB64: btoa(bin) })
     },
 
     async getAttachment(id) {
       try {
-        const bytes = await invoke<number[]>('read_attachment', { folder, name: id })
-        return new Blob([new Uint8Array(bytes)])
+        // 后端返回原始二进制（tauri::ipc::Response），前端拿到 ArrayBuffer
+        const buf = await invoke<ArrayBuffer>('read_attachment', { folder, name: id })
+        return new Blob([buf])
       } catch {
         return null
       }
+    },
+
+    async listAttachments() {
+      try {
+        return await invoke<string[]>('list_attachments', { folder })
+      } catch {
+        return []
+      }
+    },
+
+    async deleteAttachment(name) {
+      await invoke('delete_attachment', { folder, name })
     },
 
     // 回收站 = 同步文件夹下的 .trash 子目录，复用现有命令

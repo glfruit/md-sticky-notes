@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { marked } from 'marked'
 import DOMPurify from 'dompurify'
-import { getAttachment, attachmentId } from '@/lib/attachments'
+import { getAttachmentUrl, attachmentId } from '@/lib/attachments'
 import { decorateTasks } from '@/lib/decorateTasks'
 
 marked.setOptions({ gfm: true, breaks: true })
@@ -22,7 +22,7 @@ export function Markdown({ source }: { source: string }) {
 
   const decorated = useMemo(() => decorateTasks(html), [html])
 
-  // 把 attachment:// 图片解析为 IndexedDB 里的 Blob URL
+  // 把 attachment:// 图片解析为缓存好的 Blob URL（每个附件整个生命周期只读一次 IPC）
   useEffect(() => {
     const root = rootRef.current
     if (!root) return
@@ -30,16 +30,13 @@ export function Markdown({ source }: { source: string }) {
     root.querySelectorAll('pre').forEach((pre) => {
       if (!(pre.textContent ?? '').trim()) pre.style.display = 'none'
     })
-    const objectUrls: string[] = []
     let cancelled = false
     root.querySelectorAll('img').forEach((img) => {
       const id = attachmentId(img.getAttribute('src') ?? '')
       if (!id) return
-      void getAttachment(id).then((blob) => {
+      void getAttachmentUrl(id).then((url) => {
         if (cancelled) return
-        if (blob) {
-          const url = URL.createObjectURL(blob)
-          objectUrls.push(url)
+        if (url) {
           img.setAttribute('src', url)
         } else {
           img.replaceWith(document.createTextNode('🖼 图片已被清理'))
@@ -48,7 +45,6 @@ export function Markdown({ source }: { source: string }) {
     })
     return () => {
       cancelled = true
-      objectUrls.forEach((u) => URL.revokeObjectURL(u))
     }
   }, [decorated])
 

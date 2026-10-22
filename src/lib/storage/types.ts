@@ -10,6 +10,9 @@ export interface StorageAdapter {
   deleteNote(id: string): Promise<void>
   saveAttachment(blob: Blob, id: string): Promise<void>
   getAttachment(id: string): Promise<Blob | null>
+  /** 附件管理（孤儿清理用；未实现的存储返回 0 个可清理项） */
+  listAttachments?(): Promise<string[]>
+  deleteAttachment?(name: string): Promise<void>
   /** 回收站：移入 / 列出 / 恢复 / 彻底删除 */
   trashNote(note: StickyNoteData): Promise<void>
   listTrash(): Promise<StickyNoteData[]>

@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { StickyNoteData, NoteColor } from '@/types/note'
 import { COLOR_ORDER } from '@/types/note'
-import { initStorage, getStorage, isTauri } from '@/lib/storage'
+import { initStorage, getStorage, isTauri, setFolder } from '@/lib/storage'
+import { clearAttachmentCache, cleanOrphanAttachments } from '@/lib/attachments'
 
 const SEED_KEY = 'md-sticky-notes:seeded'
 /** 回收站保留 30 天 */
@@ -283,21 +284,52 @@ export function useNotes() {
     [applyNotes, scheduleSave],
   )
 
-  // 从存储层整体重载（切换文件夹 / 聚焦同步用）
-  const reload = useCallback(async () => {
-    const fresh = (await getStorage().loadNotes()).map(clampIntoScrollArea)
-    const cur = notesRef.current
-    // 正在编辑的便签以本地为准，避免打断输入
-    const editing = new Set(cur.filter((n) => !n.preview).map((n) => n.id))
-    const freshIds = new Set(fresh.map((n) => n.id))
-    const merged = fresh.map((n) => (editing.has(n.id) ? (cur.find((c) => c.id === n.id) ?? n) : n))
-    for (const c of cur) if (!freshIds.has(c.id)) merged.push(c)
-    zTop.current = Math.max(
-      zTop.current,
-      merged.reduce((m, n) => Math.max(m, n.z), 0) + 1,
-    )
-    applyNotes(merged)
-  }, [applyNotes])
+  // 从存储层重载。
+  // merge 模式（聚焦 / 文件夹变更通知）：正在编辑的便签以本地为准，避免打断输入；
+  // replace 模式（切换文件夹）：先 flush 旧文件夹，再全量替换，避免旧便签漏进新文件夹
+  const reload = useCallback(
+    async (replace = false) => {
+      if (replace) await flushPendingSaves()
+      const fresh = (await getStorage().loadNotes()).map(clampIntoScrollArea)
+      if (replace) {
+        zTop.current = fresh.reduce((m, n) => Math.max(m, n.z), 0) + 1
+        applyNotes(fresh)
+        const trashed = await getStorage().listTrash()
+        const cutoff = Date.now() - TRASH_TTL_MS
+        applyTrash(trashed.filter((n) => n.updatedAt >= cutoff))
+        return
+      }
+      const cur = notesRef.current
+      const editing = new Set(cur.filter((n) => !n.preview).map((n) => n.id))
+      const freshIds = new Set(fresh.map((n) => n.id))
+      const merged = fresh.map((n) => (editing.has(n.id) ? (cur.find((c) => c.id === n.id) ?? n) : n))
+      for (const c of cur) if (!freshIds.has(c.id)) merged.push(c)
+      zTop.current = Math.max(
+        zTop.current,
+        merged.reduce((m, n) => Math.max(m, n.z), 0) + 1,
+      )
+      // 自己的写入也会触发监听事件：内容没变就不重渲染
+      if (JSON.stringify(merged) !== JSON.stringify(cur)) applyNotes(merged)
+    },
+    [applyNotes, applyTrash, flushPendingSaves],
+  )
+
+  // 切换同步文件夹：flush → 换适配器（含重挂监听）→ 全量重载
+  const switchFolder = useCallback(
+    async (path: string) => {
+      await flushPendingSaves()
+      clearAttachmentCache()
+      await setFolder(path)
+      await reload(true)
+    },
+    [flushPendingSaves, reload],
+  )
+
+  /** 手动清理未被引用的附件，返回删除数量 */
+  const cleanAttachments = useCallback(
+    async () => cleanOrphanAttachments(notesRef.current, trashRef.current),
+    [],
+  )
 
   // 桌面版：窗口重新获得焦点时从文件夹拉一次（另一台机器的改动同步进来）
   useEffect(() => {
@@ -308,6 +340,33 @@ export function useNotes() {
     window.addEventListener('focus', onFocus)
     return () => window.removeEventListener('focus', onFocus)
   }, [loaded, reload])
+
+  // 桌面版：Rust 文件夹监听事件 → 去抖后增量重载（保持聚焦时也能同步另一台机器的改动）
+  useEffect(() => {
+    if (!loaded || !isTauri()) return
+    let unlisten: (() => void) | undefined
+    let timer = 0
+    void import('@tauri-apps/api/event').then(({ listen }) =>
+      listen('folder-changed', () => {
+        if (getStorage().kind !== 'folder') return
+        window.clearTimeout(timer)
+        timer = window.setTimeout(() => void reload(), 300)
+      }).then((fn) => {
+        unlisten = fn
+      }),
+    )
+    return () => {
+      unlisten?.()
+      window.clearTimeout(timer)
+    }
+  }, [loaded, reload])
+
+  // 文件夹模式：启动 15 秒后清理孤儿附件（等云盘同步先拉全文件）
+  useEffect(() => {
+    if (!loaded || getStorage().kind !== 'folder') return
+    const t = window.setTimeout(() => void cleanAttachments(), 15_000)
+    return () => window.clearTimeout(t)
+  }, [loaded, cleanAttachments])
 
   // 退出前把防抖中的内容立即落盘：
   // - pagehide / visibilitychange 兜底（尽力而为，无法等待完成）
@@ -348,6 +407,8 @@ export function useNotes() {
     deleteNote,
     bringToFront,
     reload,
+    switchFolder,
+    cleanAttachments,
     flushPendingSaves,
     restoreTrashNote,
     permanentlyDeleteTrash,

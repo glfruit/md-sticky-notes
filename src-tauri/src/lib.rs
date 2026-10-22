@@ -1,6 +1,9 @@
 use std::fs;
 use std::path::Path;
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
 use tauri::{Emitter, Manager};
+use tauri::ipc::Response;
 
 #[tauri::command]
 fn home_dir() -> String {
@@ -74,17 +77,96 @@ fn delete_note(folder: String, id: String) -> Result<(), String> {
 }
 
 #[tauri::command]
-fn write_attachment(folder: String, name: String, bytes: Vec<u8>) -> Result<(), String> {
+fn write_attachment(folder: String, name: String, data_b64: String) -> Result<(), String> {
+    use base64::Engine;
     let dir = Path::new(&folder).join("attachments");
     fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     let safe = name.replace(['/', '\\'], "_");
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(data_b64)
+        .map_err(|e| e.to_string())?;
     atomic_write(&dir.join(safe), &bytes)
 }
 
+/// 原始二进制返回（IPC raw payload），避免大图片走 JSON 数字数组
 #[tauri::command]
-fn read_attachment(folder: String, name: String) -> Result<Vec<u8>, String> {
+fn read_attachment(folder: String, name: String) -> Result<Response, String> {
     let safe = name.replace(['/', '\\'], "_");
-    fs::read(Path::new(&folder).join("attachments").join(safe)).map_err(|e| e.to_string())
+    let bytes =
+        fs::read(Path::new(&folder).join("attachments").join(safe)).map_err(|e| e.to_string())?;
+    Ok(Response::new(bytes))
+}
+
+/// 列出 attachments 目录下的全部附件文件名（孤儿清理用）
+#[tauri::command]
+fn list_attachments(folder: String) -> Result<Vec<String>, String> {
+    let dir = Path::new(&folder).join("attachments");
+    if !dir.exists() {
+        return Ok(vec![]);
+    }
+    let mut out = Vec::new();
+    let entries = fs::read_dir(&dir).map_err(|e| e.to_string())?;
+    for entry in entries.flatten() {
+        let p = entry.path();
+        // 崩溃残留的 .tmp 不会被任何便签引用，一并返回、按孤儿清理
+        if let Some(name) = p.file_name().and_then(|s| s.to_str()) {
+            out.push(name.to_string());
+        }
+    }
+    Ok(out)
+}
+
+#[tauri::command]
+fn delete_attachment(folder: String, name: String) -> Result<(), String> {
+    let safe = name.replace(['/', '\\'], "_");
+    let p = Path::new(&folder).join("attachments").join(safe);
+    if p.exists() {
+        fs::remove_file(p).map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+/// 监听同步文件夹（便签 / 回收站 / 附件变更），去抖后通知前端重载。
+/// 重复调用会替换旧 watcher（drop 后通道关闭、线程自动退出）。
+struct WatchState {
+    _watcher: notify::RecommendedWatcher,
+}
+
+static WATCH_STATE: Mutex<Option<WatchState>> = Mutex::new(None);
+
+#[tauri::command]
+fn watch_folder(app: tauri::AppHandle, folder: String) -> Result<(), String> {
+    use notify::Watcher;
+    use std::sync::mpsc;
+    let (tx, rx) = mpsc::channel::<()>();
+    let mut watcher =
+        notify::recommended_watcher(move |res: Result<notify::Event, _>| {
+            if res.is_ok() {
+                let _ = tx.send(());
+            }
+        })
+        .map_err(|e| e.to_string())?;
+    watcher
+        .watch(Path::new(&folder), notify::RecursiveMode::Recursive)
+        .map_err(|e| e.to_string())?;
+    *WATCH_STATE.lock().unwrap() = Some(WatchState { _watcher: watcher });
+    std::thread::spawn(move || {
+        let mut last: Option<Instant> = None;
+        loop {
+            match rx.recv_timeout(Duration::from_millis(200)) {
+                Ok(()) => last = Some(Instant::now()),
+                Err(mpsc::RecvTimeoutError::Timeout) => {
+                    // 静默 400ms 后合并为一次通知
+                    if last.is_some_and(|t| t.elapsed() >= Duration::from_millis(400)) {
+                        last = None;
+                        let _ = app.emit("folder-changed", ());
+                    }
+                }
+                Err(mpsc::RecvTimeoutError::Disconnected) => return,
+            }
+        }
+    });
+    Ok(())
 }
 
 /// 弹出系统文件夹选择器
@@ -188,6 +270,9 @@ pub fn run() {
             delete_note,
             write_attachment,
             read_attachment,
+            list_attachments,
+            delete_attachment,
+            watch_folder,
             pick_folder
         ])
         .run(tauri::generate_context!())
