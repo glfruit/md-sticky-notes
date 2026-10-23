@@ -1,6 +1,6 @@
-# 发布管线：推 v* tag → 双架构 macOS DMG → draft release（人工在 Releases 页放行）
-# 票02 基线：零 secret（只用自动注入的 GITHUB_TOKEN）+ ad-hoc 签名；
-# 票03 在此加 Developer ID + 公证凭据；票08 加 windows-latest 矩阵项产 NSIS。
+# 发布管线：推 v* tag → 双架构 macOS 签名+公证 DMG → draft release（人工在 Releases 页放行）
+# 票03 起：CI 强制 Developer ID 签名 + 公证，凭据缺失时前置检查直接红（防止静默产出未签名产物）。
+# 票04 将在此追加 updater 产物（.app.tar.gz + latest.json）；票08 加 windows-latest 矩阵项产 NSIS。
 name: release
 
 on:
@@ -11,6 +11,7 @@ jobs:
   build-macos:
     permissions:
       contents: write
+    timeout-minutes: 60 # 公证等待（notarytool --wait）无 SLA，给足余量
     strategy:
       fail-fast: false
       matrix:
@@ -22,6 +23,28 @@ jobs:
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v7
+
+      # 防呆：Tauri 无凭据时会静默产出未签名 app 且不报错，必须显式拦截
+      - name: 前置校验签名/公证凭据（缺失即失败）
+        env:
+          HAS_CERT: ${{ secrets.APPLE_CERTIFICATE != '' }}
+          HAS_API_KEY: ${{ secrets.APPLE_API_KEY != '' }}
+          HAS_API_ISSUER: ${{ secrets.APPLE_API_ISSUER != '' }}
+        run: |
+          if [ "$HAS_CERT" != "true" ]; then
+            echo "::error::缺少 APPLE_CERTIFICATE secret（Developer ID .p12 的 base64）。为防静默产出未签名产物，构建终止。运行 .scratch/release/wizard-03-apple-signing.sh 完成配置。"
+            exit 1
+          fi
+          if [ "$HAS_API_KEY" != "true" ] || [ "$HAS_API_ISSUER" != "true" ]; then
+            echo "::error::缺少 APPLE_API_KEY / APPLE_API_ISSUER secret（App Store Connect API key）。公证无法进行，构建终止。"
+            exit 1
+          fi
+
+      # 公证用 .p8：写入 Tauri 自动发现的 ~/private_keys（AuthKey_<keyid>.p8）
+      - name: 落盘公证用 .p8 私钥
+        run: |
+          mkdir -p "$HOME/private_keys"
+          printf '%s\n' "${{ secrets.APPLE_API_KEY_P8 }}" > "$HOME/private_keys/AuthKey_${{ secrets.APPLE_API_KEY }}.p8"
 
       - name: setup node
         uses: actions/setup-node@v6
@@ -45,9 +68,13 @@ jobs:
       - uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # ad-hoc 签名：无证书的 CI 产物若不签，Apple Silicon 下载后会被判 damaged
-          # （官方 Pipelines 指南）。票03 换成正式 Developer ID + 公证凭据。
-          APPLE_SIGNING_IDENTITY: '-'
+          # CI 签名：Tauri 读取 base64 p12 自动建临时钥匙串并推断 Developer ID 身份
+          # （不设 APPLE_SIGNING_IDENTITY，避免与证书不一致时的匹配报错）
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          # 公证：App Store Connect API key 路线（.p8 已落盘 ~/private_keys）
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
         with:
           tagName: ${{ github.ref_name }}
           releaseName: ${{ github.ref_name }}
@@ -55,3 +82,19 @@ jobs:
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
+
+      # 产物验收：不是 Developer ID / Gatekeeper 拒绝 / staple 缺失，任一命中即红。
+      # （tauri-action 已把资产传到 draft release；红灯即代表该 draft 不可发布）
+      - name: 校验签名与公证
+        run: |
+          APP=$(ls -d src-tauri/target/*/release/bundle/macos/*.app | head -1)
+          DMG=$(ls src-tauri/target/*/release/bundle/dmg/*.dmg | head -1)
+          echo "校验对象：$APP / $DMG"
+          codesign -dv "$APP" 2>&1 | grep -q "Developer ID Application" \
+            || { echo "::error::产物不是 Developer ID 签名"; exit 1; }
+          spctl -a -vv -t open "$APP" 2>&1 | grep -q "accepted" \
+            || { echo "::error::Gatekeeper 拒绝产物（公证缺失？）"; exit 1; }
+          spctl -a -vv -t open "$APP" 2>&1 | grep -q "Notarized Developer ID" \
+            || { echo "::error::spctl 未显示 Notarized Developer ID"; exit 1; }
+          xcrun stapler validate "$APP" || { echo "::error::.app staple 校验失败"; exit 1; }
+          xcrun stapler validate "$DMG" || { echo "::error::DMG staple 校验失败"; exit 1; }

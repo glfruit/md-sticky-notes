@@ -6,7 +6,7 @@
 
 **Blocked by:** 02
 
-**Status:** ready-for-agent
+**Status:** ready-for-agent（agent 部分已完成：release.yml 加前置凭据校验 + .p8 落盘 + 签名/公证产物验收步；引导脚本 `.scratch/release/wizard-03-apple-signing.sh`。防呆验证：secrets 配置前推 v0.0.2 应红并给出明确错误；人类步骤待跑 wizard——含 $99 注册，激活可能需数小时到数天）
 
 - [ ] 本地（证书在钥匙串）构建的 .app：codesign 显示 Developer ID、spctl 通过、stapler validate 通过
 - [ ] CI 构建的 DMG 真机开箱无拦截
