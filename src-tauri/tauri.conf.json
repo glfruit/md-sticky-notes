@@ -2,7 +2,7 @@
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "MD Sticky Notes",
   "version": "0.1.0",
-  "identifier": "com.mdstickynotes.app",
+  "identifier": "com.mdstickynotes.desktop",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:3000",
