@@ -6,10 +6,10 @@
 
 **Status:** ready-for-agent
 
-- [ ] 本地构建产物名为 MD Sticky Notes.app / 对应 DMG，打开可正常使用
-- [ ] bundle.targets 显式为 dmg / nsis，不再隐式产出 MSI 等其他目标
-- [ ] UI 内中文「MD 便签」显示无回归（窗口标题等）
-- [ ] npm test、npm run lint 全绿
-- [ ] 排查代码与文档中没有依赖旧 productName 的硬编码引用需要同步
+- [ ] 本地构建产物名为 MD Sticky Notes.app / 对应 DMG（已验证：构建成功，DMG 4.38 MiB）；「打开可正常使用」待确认——验证时旧版实例在运行且无双开防护，未启动新构建；双击打开 target/release/bundle/dmg/MD Sticky Notes_0.1.0_aarch64.dmg 正常使用后勾掉本项
+- [x] bundle.targets 显式为 dmg / nsis，不再隐式产出 MSI 等其他目标（macOS 构建只产 DMG）
+- [x] UI 内中文「MD 便签」显示无回归（窗口标题等——全部 7 处 UI 文案未动，含同步子文件夹名）
+- [x] npm test、npm run lint 全绿（48 测试通过）
+- [x] 排查代码与文档中没有依赖旧 productName 的硬编码引用需要同步（仅 productName 本体需改；发现的 README 过时命令 `npm run tauri build` 与命名无关，留票 05 重写 README 时处理）
 
 **参考：** docs/adr/0005-ascii-product-name.md、.scratch/release/spec.md
