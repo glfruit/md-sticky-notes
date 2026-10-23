@@ -211,7 +211,7 @@ say "gh 已就绪。"
 stage "创建 public 仓库并推送"
 ask REPO_NAME "仓库名（直接回车 = md-sticky-notes）"
 [[ -z "$REPO_NAME" ]] && REPO_NAME="md-sticky-notes"
-say "将在你的 GitHub 账号下创建 public 仓库 $REPO_NAME，"
+say "将在你的 GitHub 账号下创建 public 仓库 ${REPO_NAME}，"
 say "并推送当前 main 分支全部提交（含 .github/workflows 与 LICENSE）。"
 confirm "确认创建并推送？" || { warn "已取消；重跑本脚本可随时再来"; exit 1; }
 if gh repo view "$REPO_NAME" >/dev/null 2>&1; then
@@ -224,7 +224,7 @@ fi
 REPO_FULL=$(gh repo view --json nameWithOwner -q .nameWithOwner)
 write_env GITHUB_REPO "$REPO_FULL"
 open_url "https://github.com/$REPO_FULL"
-say "公开仓库就绪：$REPO_FULL（已记入 .env 的 GITHUB_REPO，票04 配 updater 端点要用）"
+say "公开仓库就绪：${REPO_FULL}（已记入 .env 的 GITHUB_REPO，票04 配 updater 端点要用）"
 
 # ── Stage 3：开启 Issues 与 Discussions ──────────────────────────────────
 stage "开启反馈渠道"
