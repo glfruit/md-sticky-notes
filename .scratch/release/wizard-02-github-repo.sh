@@ -187,6 +187,7 @@ finish() {
 TOTAL_STAGES=4
 
 banner "GitHub 仓库与发布管线开通（票02）"
+note "脚本版本 v2（2026-10-23）：已修复变量后紧跟全角标点的 unbound variable 问题。"
 
 # ── Stage 1：gh CLI 就绪 ──────────────────────────────────────────────────
 stage "gh CLI 就绪"
