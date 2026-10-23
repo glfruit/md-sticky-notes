@@ -26,7 +26,12 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["dmg", "nsis"],
+    "targets": [
+      "app",
+      "dmg",
+      "nsis"
+    ],
+    "createUpdaterArtifacts": true,
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -36,6 +41,14 @@
     ],
     "android": {
       "debugApplicationIdSuffix": ".debug"
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDg2OEQxRjdEQkM3NjU5N0MKUldSOFdYYThmUitOaHVmWi9aa1Vib1YwT2NMTUl3V3g2NVBTK2VNWnk0aVBNS2FITXpubVhzbVUK",
+      "endpoints": [
+        "https://github.com/glfruit/md-sticky-notes/releases/latest/download/latest.json"
+      ]
     }
   }
 }

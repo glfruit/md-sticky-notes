@@ -7,6 +7,7 @@ import { SearchPanel } from '@/components/SearchPanel'
 import type { SearchJump } from '@/components/SearchPanel'
 import { Sidebar } from '@/components/Sidebar'
 import { StorageSettings } from '@/components/StorageSettings'
+import { UpdateBanner } from '@/components/UpdateBanner'
 import { useReminders } from '@/hooks/useReminders'
 import { isTauri } from '@/lib/storage'
 import { exportAllNotes } from '@/lib/export'
@@ -256,6 +257,7 @@ export default function App() {
           onCleanAttachments={cleanAttachments}
         />
       )}
+      <UpdateBanner />
     </div>
   )
 }

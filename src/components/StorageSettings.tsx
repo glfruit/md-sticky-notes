@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { FolderOpen, HardDrive, Cloud, X, BrushCleaning } from 'lucide-react'
 import { isTauri, getFolder, pickFolder } from '@/lib/storage'
+import { UpdaterSection } from './UpdaterSection'
 
 const PREFILL_KEY = 'md-sticky-notes:clipboard-prefill'
 
@@ -114,6 +115,7 @@ export function StorageSettings({ onClose, onSwitchFolder, onCleanAttachments }:
               另一台机器装同一个应用并指向同一文件夹即可同步。
               文件夹里的改动会实时同步进来（另一台机器编辑、云盘拉取完成都会自动刷新）。
             </div>
+            <UpdaterSection />
           </>
         ) : (
           <div className="flex items-start gap-2.5">

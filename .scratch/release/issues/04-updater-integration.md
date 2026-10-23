@@ -6,7 +6,9 @@
 
 **Blocked by:** 02（与 03 可并行）
 
-**Status:** ready-for-agent
+**Status:** ready-for-agent（agent 部分已完成并本地验证：插件注册、状态机+横幅+设置区、CI 防呆与密钥注入、公钥已固化、密钥对已生成于 ~/.tauri/、本地构建产出 .app.tar.gz+.sig。**待人类**：跑 wizard-04 完成【私钥备份确认 + 2 个 secrets】→ 推 v0.0.5 冒烟验收 draft 里的 latest.json+.sig）
+
+**实现注记：** createUpdaterArtifacts 要求 plugins.updater 段同时存在（缺了在 bundler 设置阶段硬报错）；updater 产物需要 targets 含 `app`（`.app.tar.gz` 从 app bundle 打出，只有 dmg/nsis 时出警告且不产更新包）。本地构建用 `bash scripts/build-desktop.sh`（自动注入 .env 里的密钥；直接 `npx tauri build` 会报缺私钥）。
 
 - [ ] 本地构建产出 .app.tar.gz 与 .sig，且可用公钥验证签名
 - [ ] draft release 含 latest.json 且指向正确资产
