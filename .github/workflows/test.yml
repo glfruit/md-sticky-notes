@@ -1,0 +1,25 @@
+# 轻量测试管线：push / PR 时跑 lint + 单测（Rust 编译由 release workflow 覆盖；
+# Windows job 在票08 随移植加入）
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: lts/*
+          cache: npm
+
+      - run: npm ci
+
+      - run: npm run lint
+
+      - run: npm test

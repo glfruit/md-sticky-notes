@@ -1,0 +1,57 @@
+# 发布管线：推 v* tag → 双架构 macOS DMG → draft release（人工在 Releases 页放行）
+# 票02 基线：零 secret（只用自动注入的 GITHUB_TOKEN）+ ad-hoc 签名；
+# 票03 在此加 Developer ID + 公证凭据；票08 加 windows-latest 矩阵项产 NSIS。
+name: release
+
+on:
+  push:
+    tags: ['v*']
+
+jobs:
+  build-macos:
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest # arm64（Apple Silicon）
+            args: '--target aarch64-apple-darwin'
+          - platform: macos-latest # Intel 版在 arm64 runner 上交叉编译（官方示例做法）
+            args: '--target x86_64-apple-darwin'
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: setup node
+        uses: actions/setup-node@v6
+        with:
+          node-version: lts/*
+          cache: npm
+
+      - name: install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      - name: install frontend dependencies
+        run: npm ci
+
+      - uses: tauri-apps/tauri-action@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # ad-hoc 签名：无证书的 CI 产物若不签，Apple Silicon 下载后会被判 damaged
+          # （官方 Pipelines 指南）。票03 换成正式 Developer ID + 公证凭据。
+          APPLE_SIGNING_IDENTITY: '-'
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: ${{ github.ref_name }}
+          releaseBody: 'See the assets to download this version and install.'
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.args }}

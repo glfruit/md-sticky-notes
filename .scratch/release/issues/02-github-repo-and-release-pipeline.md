@@ -6,7 +6,7 @@
 
 **Blocked by:** 01
 
-**Status:** ready-for-agent
+**Status:** ready-for-agent（agent 部分已完成：release/test 两个 workflow、MIT LICENSE、引导脚本 `.scratch/release/wizard-02-github-repo.sh`；仓库创建与端到端验证待人类跑 wizard + 冒烟 tag v0.0.1）
 
 - [ ] GitHub public 仓库可见，含 MIT LICENSE，Issues / Discussions 已开启
 - [ ] tag 触发的 release workflow 产出 arm64 + x64 两个 DMG 的 draft release，需人工 publish

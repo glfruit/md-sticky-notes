@@ -25,3 +25,6 @@ dist-ssr
 
 # ZCode session data
 .zcode/
+
+# wizard 捕获的本地值（可能含敏感信息，不入库）
+.env
