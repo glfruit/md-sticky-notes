@@ -95,19 +95,23 @@ jobs:
 
       # 产物验收（按模式）：cert 模式要求 Developer ID + Notarized + staple 齐全；
       # adhoc 模式要求 ad-hoc 签名在位（缺失则 Apple Silicon 判 damaged）。
+      # 注意：Tauri 打完 DMG 会清掉 .app 目录，所以挂载 DMG 校验里面的 app。
       # tauri-action 已把资产传到 draft release：红灯即代表该 draft 不可发布。
       - name: 校验签名
         run: |
-          APP=$(ls -d src-tauri/target/*/release/bundle/macos/*.app | head -1)
           DMG=$(ls src-tauri/target/*/release/bundle/dmg/*.dmg | head -1)
-          echo "校验对象：$APP / $DMG"
+          echo "校验对象：$DMG"
+          MNT="$RUNNER_TEMP/dmg-verify"
+          hdiutil attach -readonly -nobrowse -quiet "$DMG" -mountpoint "$MNT"
+          trap 'hdiutil detach -quiet "$MNT" || true' EXIT
+          APP=$(ls -d "$MNT"/*.app | head -1)
+          echo "校验 app：$APP"
           if [ "${{ steps.creds.outputs.mode }}" = "cert" ]; then
             codesign -dv "$APP" 2>&1 | grep -q "Developer ID Application" \
               || { echo "::error::产物不是 Developer ID 签名"; exit 1; }
             spctl -a -vv -t open "$APP" 2>&1 | grep -q "Notarized Developer ID" \
               || { echo "::error::spctl 未显示 Notarized Developer ID（公证缺失？）"; exit 1; }
             xcrun stapler validate "$APP" || { echo "::error::.app staple 校验失败"; exit 1; }
-            xcrun stapler validate "$DMG" || { echo "::error::DMG staple 校验失败"; exit 1; }
           else
             codesign -dv "$APP" 2>&1 | grep -q "Signature=adhoc" \
               || { echo "::error::ad-hoc 签名缺失，Apple Silicon 用户会看到「已损坏」"; exit 1; }
