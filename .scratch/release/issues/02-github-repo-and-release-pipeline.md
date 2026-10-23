@@ -6,12 +6,12 @@
 
 **Blocked by:** 01
 
-**Status:** ready-for-agent（agent 部分已完成：release/test 两个 workflow、MIT LICENSE、引导脚本 `.scratch/release/wizard-02-github-repo.sh`；仓库创建与端到端验证待人类跑 wizard + 冒烟 tag v0.0.1）
+**Status:** done（2026-10-23 验收通过）
 
-- [ ] GitHub public 仓库可见，含 MIT LICENSE，Issues / Discussions 已开启
-- [ ] tag 触发的 release workflow 产出 arm64 + x64 两个 DMG 的 draft release，需人工 publish
-- [ ] push 触发的 test workflow（lint + vitest）绿
-- [ ] Rust 缓存生效，重复构建耗时可接受
-- [ ] 零 secret 跑通全流程
+- [x] GitHub public 仓库可见，含 MIT LICENSE，Issues / Discussions 已开启（glfruit/md-sticky-notes，GitHub 已识别 MIT）
+- [x] tag 触发的 release workflow 产出 arm64 + x64 两个 DMG 的 draft release，需人工 publish（v0.0.1 冒烟：两个 DMG 资产齐全、draft 状态正确，产物经 ad-hoc 签名验证 `Signature=adhoc`；冒烟 draft 与 tag 已按计划删除）
+- [x] push 触发的 test workflow（lint + vitest）绿（27s）
+- [x] Rust 缓存生效（首跑 `Cache mode: write` 已落袋，二次运行起命中）
+- [x] 零 secret 跑通全流程（仅自动 GITHUB_TOKEN）
 
 **参考：** docs/adr/0004、.scratch/release/research/windows-packaging-ci.md、.scratch/release/spec.md
