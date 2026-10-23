@@ -4,9 +4,11 @@
 
 **人类步骤（届时 /wizard 或人工执行）：** draft 的最终 publish 点击、渠道公告发布、真机 updater 演练。其余（tag、校验、资产核对、说明填充）由 agent 按清单执行。
 
+**Status:** done（2026-10-23 16:28 v0.1.0 正式发布并标记 Latest：github.com/glfruit/md-sticky-notes/releases/tag/v0.1.0。0.1.1 updater 演练构建已触发，draft 出来后用户 publish，然后装机确认「更新横幅 → 下载 → 重启 → 版本 0.1.1」闭环。**稳定门槛计时开始**：自用 ≥14 天从今天起算；「反馈渠道开放 ≥1 周」从第一个渠道公告发出起算（渠道时机与 README 截图由用户定））
+
 **Blocked by:** 01, 02, 03, 04, 05
 
-**Status:** in-progress（2026-10-23：draft 已就绪并全部校验通过——7 资产齐全、latest.json 四平台条目、双 DMG 挂载验证 Signature=adhoc + identifier 正确、Release 说明已按模板填好。**待人类**：① 本机装 arm64 DMG 实际使用确认；② 点 Publish；③ 公告时机自定。之后执行 0.1.1 updater 演练（按 runbook §6，0.1.1 为正式 patch 版不删除；票文原「删除演练产物」作废）。draft：v0.1.0 / untagged-9388119b3a65c372dbf8）
+**Status 历史:** 发布前校验留档：7 资产齐全、latest.json 四平台条目、双 DMG 挂载验证 Signature=adhoc + identifier com.mdstickynotes.desktop、说明按模板填写。draft：v0.1.0 / untagged-9388119b3a65c372dbf8（已发布，URL 已定形）
 
 - [ ] 公开的 0.1.0 release：arm64/x64 DMG + latest.json + .sig，说明用模板
 - [ ] 校验清单全绿并留档（陌生机器开箱即用）
