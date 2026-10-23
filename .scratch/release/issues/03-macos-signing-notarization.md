@@ -6,11 +6,11 @@
 
 **Blocked by:** 02
 
-**Status:** deferred（2026-10-23：$99 投入推迟到真实反馈支持时，见 ADR-0002 修订段。工程已全部备好、零浪费——release.yml 已是双模式：secrets 一配置即自动升级签名+公证；wizard-03 随时可跑。付费当天：跑 wizard → 推冒烟 tag → 验收下方四项）
+**Status:** deferred（2026-10-23：$99 投入推迟到真实反馈支持时，见 ADR-0002 修订段。工程已全部备好、零浪费——release.yml 双模式已验证：v0.0.2 红灯实证防呆（无 secrets 快速失败+明确报错）、v0.0.4 绿灯实证 ad-hoc 模式（挂载 DMG 校验内部 app 签名，双 DMG 资产齐全）。付费当天：跑 wizard-03 → 推冒烟 tag → 验收下方四项）
 
 **Blocked by:** 02 ~~；付费决策（人肉门槛）~~
 
-**Status 历史:** 防呆验证已拿到实证——secrets 未配时 v0.0.2 红且报错明确（前置校验步，13s 快速失败）；双模式改造后无 secrets 走 ad-hoc 绿灯。
+**工程注记：** Tauri 打完 DMG 会清掉 .app 目录（bundler 的 Cleaning 步骤），CI 签名校验必须挂载 DMG 检查内部 app，不能查磁盘上的 .app（b1ddb2e 修复）。
 
 - [ ] 本地（证书在钥匙串）构建的 .app：codesign 显示 Developer ID、spctl 通过、stapler validate 通过
 - [ ] CI 构建的 DMG 真机开箱无拦截
