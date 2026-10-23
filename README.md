@@ -1,23 +1,56 @@
-# MD 便签
+# MD 便签 (MD Sticky Notes)
 
-macOS 桌面便签应用的 Markdown 增强版：每张便签是一个可拖拽的小窗口，内容是纯 Markdown，
-以 `.md` 文件落盘在本地（或云盘同步）文件夹，天然支持多机同步。
+**每张便签，就是你网盘里的一个 `.md` 文件。**
 
-基于 Tauri 2 + React 19 + Vite + Tailwind CSS 构建。
+macOS / Windows 桌面便签：一张张可拖拽的 Markdown 小窗口，内容以纯 `.md` 文件存放在
+你自己的云盘同步文件夹（Dropbox / iCloud Drive / 坚果云）——
+**没有账号、没有自有云、没有锁定**，任何编辑器都能打开你的数据，换工具随时带走。
 
-## 功能特性
+> English: Markdown-powered desktop sticky notes for macOS & Windows. Every note is a plain
+> `.md` file (YAML frontmatter + Markdown body) living in *your* cloud-synced folder —
+> no account, no vendor cloud, no lock-in. Free & open source (MIT).
 
-- **Markdown 编辑 / 预览**：加粗、斜体、代码（语法高亮）、表格、任务列表、引用、图片
-- **任务管理**：五态任务（待办 → 进行中 → 等待 → 完成 → 废弃），预览中点击循环切换、右键精确设置；
-  任务文本里写日期自动排序、临期/逾期标红；`🔁每天 / 🔁每3天 / 🔁每周五 / 🔁每月1号` 重复任务完成时自动滚到下一周期
-- **桌面化交互**：拖动（边缘吸附对齐）、缩放、折叠、置顶、半透明磨砂、双击标题栏折叠、一键整理；
-  便签拖出窗口边缘会出现滚动条，随时滚回来
-- **图片与表格**：粘贴截图 / 拖入图片自动保存；Excel / 网页表格粘贴自动转 Markdown 表格
-- **搜索**：⌘F 全局搜索，回车跳转便签并选中匹配文本
-- **侧栏**：便签列表、未完成任务汇总、回收站（30 天可恢复）、#标签筛选
-- **提醒**：任务里写了时间（`15:30` / `2026-10-25` / `2026-10-25 09:30`）到点弹系统通知
-- **多机同步**：便签保存为 Markdown 文件放进同步文件夹（默认 Dropbox，可换 iCloud / 坚果云），
-  文件夹变更实时监听，另一台机器的改动自动刷新进来
+<!-- TODO(截图)：放 2-3 张截图或 GIF（桌面多便签 / 任务五态 / 半透明+置顶），
+     发布到各渠道前补上，README 的转化率靠它们。 -->
+
+## 为什么做这个
+
+- Simplenote 已宣布停止积极开发——把数据放在别人的在线服务里，服务停了你就被动了；
+- 微软正把 Windows 便签重建进 OneNote、绑定微软账号云——便签不该被迫登陆任何账号；
+- 你想要便签的「轻」和「随手」，又想要 Markdown 的表达力，还想让数据真正属于自己。
+
+这个应用就是这三个诉求的交集：**便签形态 + Markdown 原生 + 数据存你自己的网盘**。
+
+## 功能亮点
+
+- **五态任务**：待办 → 进行中 → 等待 → 完成 → 废弃，预览里点击循环切换、右键精确设置；
+  文本里写日期自动排序、临期/逾期标红；`🔁每天 / 🔁每3天 / 🔁每周五 / 🔁每月1号` 重复任务完成自动滚到下一周期
+- **提醒**：任务里写时间（`15:30` / `2026-10-25` / `2026-10-25 09:30`）到点弹系统通知
+- **Markdown 编辑 / 预览**：代码高亮、表格、任务列表、图片；粘贴截图自动保存、Excel/网页表格粘贴自动转 Markdown 表格
+- **桌面化交互**：拖动（边缘吸附对齐）、缩放、折叠、置顶、半透明磨砂、一键整理、⌘F 全局搜索
+- **多机同步**：数据在你已有的云盘里，另一台机器装上应用指向同一文件夹即可，文件改动实时互现
+- 侧栏汇总、#标签筛选、回收站（30 天可恢复）
+
+## 下载 (Download)
+
+| 平台 | 文件 | 说明 |
+| --- | --- | --- |
+| macOS Apple Silicon | `MD-Sticky-Notes_0.1.0_aarch64.dmg` | M1 及之后 |
+| macOS Intel | `MD-Sticky-Notes_0.1.0_x64.dmg` | Intel 芯片 |
+| Windows 10 / 11 | 开发中（点 ★ / Watch 等发布） | NSIS 安装包，免管理员 |
+
+**macOS 首次打开**（当前版本为 ad-hoc 签名，打开时会提示无法验证开发者，属正常现象）：
+方法一：在 Finder 里**右键点应用 → 打开 → 打开**；方法二：双击后到
+**系统设置 → 隐私与安全性**，点「仍要打开」。只需一次，之后正常启动。
+
+**Windows 首次运行**（未签名，SmartScreen 会提示）：点「更多信息」→「仍要运行」。只需一次。
+
+下载入口：[GitHub Releases](https://github.com/glfruit/md-sticky-notes/releases/latest)
+
+## 反馈
+
+- 报 bug → [Issues](https://github.com/glfruit/md-sticky-notes/issues)
+- 提建议 / 交流用法 → [Discussions](https://github.com/glfruit/md-sticky-notes/discussions)
 
 ## 快捷键
 
@@ -57,13 +90,16 @@ updatedAt: 1760000000000
 ## 开发
 
 ```bash
-npm install          # 安装前端依赖
-npm run tauri dev    # 桌面版开发（自动起 vite + cargo）
-npm run dev          # 仅网页版（localStorage / IndexedDB 存储）
-npm test             # 单元测试（vitest）
-npm run lint         # ESLint
-npm run tauri build  # 打包 .app / .dmg
+npm install                    # 安装前端依赖
+npm run tauri dev              # 桌面版开发（自动起 vite + cargo）
+npm run dev                    # 仅网页版（localStorage / IndexedDB 存储）
+npm test                       # 单元测试（vitest）
+npm run lint                   # ESLint
+bash scripts/build-desktop.sh  # 打包（自动注入 .env 的 updater 签名密钥）
 ```
+
+> 桌面构建需要 `TAURI_SIGNING_PRIVATE_KEY` 环境变量（updater 签名用，Tauri 不读 .env），
+> 所以打包走 `scripts/build-desktop.sh`；密钥的生成与配置见[发布 runbook](docs/release-runbook.md)。
 
 Rust 侧代码在 `src-tauri/`，主要负责文件 IO（便签读写、附件、原子写）、文件夹监听（notify）、
 全局热键、系统托盘与剪贴板。
@@ -81,5 +117,10 @@ src/
     editor.ts          # 纯函数：列表续接、任务状态机、重复任务、Markdown 清理
     note.ts            # deriveTitle 等内容派生
     storage/           # 存储适配器（localStorage / 同步文件夹）
+    updater.ts         # 自动更新状态机
     attachments.ts     # 附件保存、URL 缓存、孤儿清理
 ```
+
+## License
+
+[MIT](./LICENSE)

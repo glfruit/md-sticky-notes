@@ -4,12 +4,12 @@
 
 **Blocked by:** 03, 04
 
-**Status:** ready-for-agent
+**Status:** done（2026-10-23；唯一遗留：README 截图/GIF 占位待用户补——已留 TODO 注释标明要拍哪几张，发布到渠道前必须有）
 
-- [ ] README 双语，含定位话术、功能亮点、下载表与 SmartScreen 指引、反馈入口
-- [ ] 下载表含 macOS「首次打开放行」指引（ad-hoc 模式期间：右键打开 / 系统设置 → 隐私与安全性 → 仍要打开，见 ADR-0002 修订段）
-- [ ] runbook 覆盖 tag → publish → 公告 → updater 演练全流程，校验清单可逐项勾选（含当前签名模式的说明：ad-hoc 或 Developer ID，随 secrets 状态自动切换）
-- [ ] Release 说明模板就绪
-- [ ] 公告渠道清单含各渠道提交要点（标题 / 一句话介绍 / 链接）
+- [x] README 双语，含定位话术、功能亮点、下载表与 SmartScreen 指引、反馈入口
+- [x] 下载表含 macOS「首次打开放行」指引（ad-hoc 模式期间：右键打开 / 系统设置 → 隐私与安全性 → 仍要打开，见 ADR-0002 修订段）
+- [x] runbook 覆盖 tag → publish → 公告 → updater 演练全流程，校验清单可逐项勾选（含当前签名模式说明：ad-hoc 或 Developer ID，随 secrets 状态自动切换）→ docs/release-runbook.md
+- [x] Release 说明模板就绪 → docs/release-template.md
+- [x] 公告渠道清单含各渠道提交要点（依据 market-analysis.md：HelloGitHub 收录是决定性节点、r/macapps 卖点句式已校验、Show HN 话术打 Tauri 轻量）
 
 **参考：** .scratch/release/research/market-analysis.md（话术与渠道排序依据）、.scratch/release/spec.md
