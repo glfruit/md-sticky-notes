@@ -70,3 +70,15 @@ hdiutil detach -quiet /tmp/dmg-verify
 - draft 阶段发现问题：直接删 draft + 删 tag（`gh release delete vX.Y.Z --cleanup-tag`），修复后重打
 - 已 publish 后发现严重问题：Releases 页把该版本标 pre-release / 置顶公告，修复版尽快发
 - updater 签名私钥丢失：无法再向存量用户推更新；新用户不受影响。立刻换密钥对 + 更新 conf 公钥 + 发公告引导存量用户手动重装
+
+## 已知问题排查：用户侧「检查更新失败：error sending request」
+
+应用内 HTTP（reqwest）会读取 **macOS 系统代理的静态条目**（HTTP/HTTPS/SOCKS），但**不执行 PAC 自动代理脚本**——与浏览器行为不同（浏览器优先 PAC）。典型场景：系统设置里残留一个已失效的局域网代理地址（如换过环境的 `172.16.x.x:7890`），浏览器因 PAC 判定直连而正常，应用却一直走死代理超时。
+
+排查步骤（反馈给用户的话术）：
+
+1. 确认网络能直连 GitHub：终端 `curl -sL -o /dev/null -w '%{http_code}' https://github.com` 应为 200
+2. 系统设置 → 网络 → 当前网络 → 详细信息 → 代理：关掉指向已失效地址的静态代理开关（保留正常工作的 PAC / 现代理）
+3. 回应用点「重试」
+
+工程侧备选（未实施，若用户反馈集中再启动）：updater 端点加国内可达的镜像回退；或跟进 tauri-plugin-updater 上游对 PAC/多端点网络错误回退的支持。
