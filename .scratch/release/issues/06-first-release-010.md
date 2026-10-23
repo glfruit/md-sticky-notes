@@ -6,7 +6,7 @@
 
 **Blocked by:** 01, 02, 03, 04, 05
 
-**Status:** ready-for-agent
+**Status:** in-progress（2026-10-23：draft 已就绪并全部校验通过——7 资产齐全、latest.json 四平台条目、双 DMG 挂载验证 Signature=adhoc + identifier 正确、Release 说明已按模板填好。**待人类**：① 本机装 arm64 DMG 实际使用确认；② 点 Publish；③ 公告时机自定。之后执行 0.1.1 updater 演练（按 runbook §6，0.1.1 为正式 patch 版不删除；票文原「删除演练产物」作废）。draft：v0.1.0 / untagged-9388119b3a65c372dbf8）
 
 - [ ] 公开的 0.1.0 release：arm64/x64 DMG + latest.json + .sig，说明用模板
 - [ ] 校验清单全绿并留档（陌生机器开箱即用）
