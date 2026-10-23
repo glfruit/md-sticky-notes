@@ -7,7 +7,8 @@
 **Status:** ready-for-agent
 
 - [ ] README 双语，含定位话术、功能亮点、下载表与 SmartScreen 指引、反馈入口
-- [ ] runbook 覆盖 tag → publish → 公告 → updater 演练全流程，校验清单可逐项勾选
+- [ ] 下载表含 macOS「首次打开放行」指引（ad-hoc 模式期间：右键打开 / 系统设置 → 隐私与安全性 → 仍要打开，见 ADR-0002 修订段）
+- [ ] runbook 覆盖 tag → publish → 公告 → updater 演练全流程，校验清单可逐项勾选（含当前签名模式的说明：ad-hoc 或 Developer ID，随 secrets 状态自动切换）
 - [ ] Release 说明模板就绪
 - [ ] 公告渠道清单含各渠道提交要点（标题 / 一句话介绍 / 链接）
 

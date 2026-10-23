@@ -8,7 +8,7 @@
 
 ## Solution
 
-以 GitHub public 仓库为唯一对外入口（MIT 开源，Issues + Discussions 收反馈）：macOS 侧打通 Developer ID 签名 + 公证 + 自动更新的发布管线，首发 0.1.0 公证 DMG（arm64 / x64 双包）；经稳定门槛（自用 ≥14 天 + 反馈渠道开放 ≥1 周 + 零 P0）后启动 Windows 移植，以 NSIS 安装包发布 0.2.0。发布 = 打 tag，CI 自动产出双平台全部资产并生成 draft release，人工放行。两平台都过稳定门槛后发 1.0。
+以 GitHub public 仓库为唯一对外入口（MIT 开源，Issues + Discussions 收反馈）：macOS 侧打通发布管线与自动更新，首发 0.1.0 DMG（arm64 / x64 双包，签名模式见 ADR-0002 修订：先 ad-hoc + Gatekeeper 手动放行，付费 Developer ID + 公证推迟到有真实反馈支持时）；经稳定门槛（自用 ≥14 天 + 反馈渠道开放 ≥1 周 + 零 P0）后启动 Windows 移植，以 NSIS 安装包发布 0.2.0。发布 = 打 tag，CI 自动产出双平台全部资产并生成 draft release，人工放行。两平台都过稳定门槛后发 1.0。
 
 ## User Stories
 
@@ -100,3 +100,7 @@
 - 稳定门槛是一张「人肉票」：它不是工程任务，而是 Mac 票与 Windows 票之间的 blocking 边（自用 ≥14 天 + 反馈渠道开放 ≥1 周 + 零 P0）。
 - 竞品与推广价值的市场调研另行产出（`.scratch/release/research/market-analysis.md`），不影响本 spec 的工程范围；若结论影响推广策略，届时更新 README/Further Notes。
 - 推演过的替代方案与拒绝理由均已入 ADR，此处不重复。
+
+## 修订记录
+
+- **2026-10-23**：Apple Developer Program（$99/年）投入推迟，等真实用户反馈再决定是否付费签名。过渡期 macOS 以 ad-hoc 签名分发（CI 双模式：配置 `APPLE_CERTIFICATE` 等 secrets 即自动升级为 Developer ID + 公证），README 需含 macOS「首次打开手动放行」指引。决策记录见 ADR-0002 修订段；票 03 改为 deferred（wizard 与管线已备好，付费即恢复）。用户故事 1 的「不被 Gatekeeper 拦截」改为「放行指引清晰可跟随」。

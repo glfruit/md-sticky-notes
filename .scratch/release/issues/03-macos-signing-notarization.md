@@ -6,7 +6,11 @@
 
 **Blocked by:** 02
 
-**Status:** ready-for-agent（agent 部分已完成：release.yml 加前置凭据校验 + .p8 落盘 + 签名/公证产物验收步；引导脚本 `.scratch/release/wizard-03-apple-signing.sh`。防呆验证：secrets 配置前推 v0.0.2 应红并给出明确错误；人类步骤待跑 wizard——含 $99 注册，激活可能需数小时到数天）
+**Status:** deferred（2026-10-23：$99 投入推迟到真实反馈支持时，见 ADR-0002 修订段。工程已全部备好、零浪费——release.yml 已是双模式：secrets 一配置即自动升级签名+公证；wizard-03 随时可跑。付费当天：跑 wizard → 推冒烟 tag → 验收下方四项）
+
+**Blocked by:** 02 ~~；付费决策（人肉门槛）~~
+
+**Status 历史:** 防呆验证已拿到实证——secrets 未配时 v0.0.2 红且报错明确（前置校验步，13s 快速失败）；双模式改造后无 secrets 走 ad-hoc 绿灯。
 
 - [ ] 本地（证书在钥匙串）构建的 .app：codesign 显示 Developer ID、spctl 通过、stapler validate 通过
 - [ ] CI 构建的 DMG 真机开箱无拦截
