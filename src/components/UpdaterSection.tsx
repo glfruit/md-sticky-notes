@@ -101,7 +101,12 @@ export function UpdaterSection() {
           <span className="block text-[11px] text-black/40 mt-0.5 line-clamp-2">{state.notes}</span>
         )}
         {state.phase === 'error' && (
-          <span className="block text-[11px] text-red-500/80 mt-0.5">检查失败：{state.message}</span>
+          <span className="block text-[11px] text-red-500/80 mt-0.5">
+            检查失败：{state.message}
+            <span className="block text-black/40 mt-0.5">
+              常见原因：系统代理指向了失效地址（代理工具残留设置）或暂时断网；浏览器正常不代表系统代理正常。
+            </span>
+          </span>
         )}
       </span>
       {button}

@@ -4,7 +4,7 @@ import type { StickyNoteData } from '@/types/note'
 import { NOTE_COLORS } from '@/types/note'
 import { deriveTitle, extractTags } from '@/lib/note'
 import { formatUpdatedAt } from '@/lib/datetime'
-import { extractTasks, TASK_STATUS_META, dueUrgency, DUE_LEVEL_COLORS } from '@/lib/editor'
+import { extractTasks, TASK_STATUS_META, dueUrgency, DUE_LEVEL_COLORS, groupTasks, TASK_GROUP_META } from '@/lib/editor'
 
 interface Props {
   notes: StickyNoteData[]
@@ -96,7 +96,7 @@ function NoteRow({
   )
 }
 
-/** 进行中的任务（待办 / 进行中 / 等待），有截止日期的排在最前按日期升序，临期标红 */
+/** 侧栏任务：按 进行中 → 快过期/逾期 → 等待 → 待办 分组，组内按截止日期升序，临期标红 */
 function TaskList({
   notes,
   onSelect,
@@ -104,60 +104,63 @@ function TaskList({
   notes: StickyNoteData[]
   onSelect: (id: string) => void
 }) {
-  const rows = useMemo(
+  const groups = useMemo(
     () =>
-      notes
-        .flatMap((note) =>
+      groupTasks(
+        notes.flatMap((note) =>
           extractTasks(note.content)
             .filter((t) => t.status === 'todo' || t.status === 'progress' || t.status === 'waiting')
             .map((task) => ({ note, task })),
-        )
-        .sort((a, b) => {
-          if (a.task.due && b.task.due) return a.task.due.localeCompare(b.task.due)
-          if (a.task.due) return -1
-          if (b.task.due) return 1
-          return b.note.updatedAt - a.note.updatedAt
-        }),
+        ),
+      ),
     [notes],
   )
 
-  if (rows.length === 0) {
+  if (groups.length === 0) {
     return <div className="px-3 py-6 text-center text-[12px] text-black/40">没有待办任务 🎉</div>
   }
 
   return (
     <>
-      {rows.map(({ note, task }) => {
-        const urgency = task.due ? dueUrgency(task.due) : null
-        return (
-          <button
-            key={`${note.id}-${task.index}`}
-            className="w-full flex items-center gap-2 px-3 py-1.5 text-left hover:bg-black/5 transition-colors"
-            onClick={() => onSelect(note.id)}
-            title={`${deriveTitle(note.content)} · ${TASK_STATUS_META[task.status].label}`}
-          >
-            <span
-              className="w-2 h-2 rounded-full shrink-0"
-              style={{ backgroundColor: TASK_STATUS_META[task.status].color }}
-            />
-            <span className="min-w-0 flex-1 text-[12px] text-black/70 truncate">
-              {task.text.includes('🔁') && <span title="重复任务">🔁 </span>}
-              {task.text || '（空任务）'}
-            </span>
-            {urgency && (
-              <span
-                className="shrink-0 text-[10px] font-medium px-1 rounded"
-                style={{
-                  color: DUE_LEVEL_COLORS[urgency.level],
-                  backgroundColor: DUE_LEVEL_COLORS[urgency.level] + '1a',
-                }}
+      {groups.map(({ group, rows }) => (
+        <div key={group}>
+          <div className="px-3 pt-2.5 pb-0.5 flex items-center gap-1.5">
+            <span className="text-[10px] font-semibold text-black/45">{TASK_GROUP_META[group].label}</span>
+            <span className="text-[10px] text-black/30">{rows.length}</span>
+          </div>
+          {rows.map(({ note, task }) => {
+            const urgency = task.due ? dueUrgency(task.due) : null
+            return (
+              <button
+                key={`${note.id}-${task.index}`}
+                className="w-full flex items-center gap-2 px-3 py-1.5 text-left hover:bg-black/5 transition-colors"
+                onClick={() => onSelect(note.id)}
+                title={`${deriveTitle(note.content)} · ${TASK_STATUS_META[task.status].label}`}
               >
-                {urgency.label}
-              </span>
-            )}
-          </button>
-        )
-      })}
+                <span
+                  className="w-2 h-2 rounded-full shrink-0"
+                  style={{ backgroundColor: TASK_STATUS_META[task.status].color }}
+                />
+                <span className="min-w-0 flex-1 text-[12px] text-black/70 truncate">
+                  {task.text.includes('🔁') && <span title="重复任务">🔁 </span>}
+                  {task.text || '（空任务）'}
+                </span>
+                {urgency && (
+                  <span
+                    className="shrink-0 text-[10px] font-medium px-1 rounded"
+                    style={{
+                      color: DUE_LEVEL_COLORS[urgency.level],
+                      backgroundColor: DUE_LEVEL_COLORS[urgency.level] + '1a',
+                    }}
+                  >
+                    {urgency.label}
+                  </span>
+                )}
+              </button>
+            )
+          })}
+        </div>
+      ))}
     </>
   )
 }
