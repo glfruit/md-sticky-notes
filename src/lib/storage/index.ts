@@ -21,7 +21,7 @@ export function getFolder(): string | null {
   return folderPath
 }
 
-/** 应用启动时初始化：Tauri 环境启用文件夹存储，默认 Dropbox */
+/** 应用启动时初始化：Tauri 环境启用文件夹存储，默认按 坚果云 → Dropbox → Documents 探测 */
 export async function initStorage(): Promise<void> {
   if (!isTauri()) return
   const { invoke } = await import('@tauri-apps/api/core')
@@ -30,9 +30,21 @@ export async function initStorage(): Promise<void> {
   folderPath = localStorage.getItem(FOLDER_KEY)
   if (!folderPath) {
     const home = await invoke<string>('home_dir')
-    const dropbox = `${home}/Library/CloudStorage/Dropbox`
-    const hasDropbox = await invoke<boolean>('path_exists', { path: dropbox })
-    folderPath = `${hasDropbox ? dropbox : `${home}/Documents`}/MD 便签`
+    // 默认同步盘探测顺序：坚果云（国内主流，客户端默认 ~/Nutstore Files，老版本 ~/我的坚果云）
+    // → Dropbox → Documents。只影响首次启动（已有用户的目录存在 localStorage，不受影响）。
+    const candidates = [
+      `${home}/Nutstore Files`,
+      `${home}/我的坚果云`,
+      `${home}/Library/CloudStorage/Dropbox`,
+    ]
+    let root = `${home}/Documents`
+    for (const candidate of candidates) {
+      if (await invoke<boolean>('path_exists', { path: candidate })) {
+        root = candidate
+        break
+      }
+    }
+    folderPath = `${root}/MD 便签`
     localStorage.setItem(FOLDER_KEY, folderPath)
   }
   adapter = makeFolderAdapter(folderPath, tauriInvoke)

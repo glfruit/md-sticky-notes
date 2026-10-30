@@ -13,7 +13,7 @@ interface Props {
   onCleanAttachments: () => Promise<number>
 }
 
-/** 存储位置设置面板（桌面版可选同步文件夹，默认 Dropbox） */
+/** 存储位置设置面板（桌面版可选同步文件夹，首次启动按 坚果云 → Dropbox 顺序探测） */
 export function StorageSettings({ onClose, onSwitchFolder, onCleanAttachments }: Props) {
   const [busy, setBusy] = useState(false)
   const [cleaning, setCleaning] = useState(false)
@@ -111,7 +111,7 @@ export function StorageSettings({ onClose, onSwitchFolder, onCleanAttachments }:
               </label>
             </div>
             <div className="mt-3 text-[11px] leading-relaxed text-black/45">
-              把这个文件夹放在云盘同步目录里（默认已选 Dropbox，可换成 iCloud Drive、坚果云等），
+              把这个文件夹放在云盘同步目录里（首次启动按 坚果云 → Dropbox 顺序自动选择，可换成 iCloud Drive 等任意同步目录），
               另一台机器装同一个应用并指向同一文件夹即可同步。
               文件夹里的改动会实时同步进来（另一台机器编辑、云盘拉取完成都会自动刷新）。
             </div>

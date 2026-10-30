@@ -3,7 +3,7 @@
 **每张便签，就是你网盘里的一个 `.md` 文件。**
 
 macOS / Windows 桌面便签：一张张可拖拽的 Markdown 小窗口，内容以纯 `.md` 文件存放在
-你自己的云盘同步文件夹（Dropbox / iCloud Drive / 坚果云）——
+你自己的云盘同步文件夹（坚果云 / iCloud Drive / Dropbox）——
 **没有账号、没有自有云、没有锁定**，任何编辑器都能打开你的数据，换工具随时带走。
 
 > English: Markdown-powered desktop sticky notes for macOS & Windows. Every note is a plain
