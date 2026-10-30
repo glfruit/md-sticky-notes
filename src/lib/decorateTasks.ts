@@ -30,10 +30,31 @@ function firstOwnTextNode(li: HTMLLIElement): ChildNode | null {
   return null
 }
 
+/** 悬浮状态下拉箭头（▾）的内联 SVG */
+const TRIGGER_SVG =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>'
+
+/**
+ * 给任务项追加悬浮显示的状态切换箭头：
+ * 紧凑列表放在 li 直下、松散列表放在 li > p 末尾（保证和文字同行），嵌套子列表之前。
+ */
+function appendStatusTrigger(li: HTMLLIElement) {
+  const trigger = li.ownerDocument.createElement('span')
+  trigger.className = 'task-status-trigger'
+  trigger.title = '切换状态'
+  trigger.innerHTML = TRIGGER_SVG
+  const p = li.querySelector(':scope > p') as HTMLParagraphElement | null
+  const host: HTMLElement = p ?? li
+  const nested = p ? null : host.querySelector(':scope > ul, :scope > ol')
+  if (nested) host.insertBefore(trigger, nested)
+  else host.appendChild(trigger)
+}
+
 /**
  * 装饰渲染后的 HTML：把任务列表项统一标记为 li.task-item + data-status。
  * - [ ] / [x] 由 marked 生成原生 checkbox，直接标记状态
  * - [/] / [?] / [-] marked 不认识，把行首文本标记替换成状态徽章
+ * 同时给每个任务项追加悬浮显示的 ▾ 箭头（点击展开状态菜单）。
  * 兼容紧凑列表（li 直下）和松散列表（li > p 包裹）。
  */
 export function decorateTasks(html: string): string {
@@ -43,6 +64,7 @@ export function decorateTasks(html: string): string {
     if (checkbox) {
       li.classList.add('task-item')
       li.dataset.status = checkbox.hasAttribute('checked') ? 'done' : 'todo'
+      appendStatusTrigger(li)
       return
     }
     const textNode = firstOwnTextNode(li)
@@ -60,6 +82,7 @@ export function decorateTasks(html: string): string {
     textNode.textContent = text.slice(m[0].length)
     li.classList.add('task-item')
     li.dataset.status = status
+    appendStatusTrigger(li)
   })
   return doc.body.innerHTML
 }

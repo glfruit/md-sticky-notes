@@ -40,7 +40,7 @@ console.log('hello')
 - **⌥B** 固定左侧导航栏；鼠标移到屏幕左边缘自动滑出
 - 编辑模式底部工具条：**A 颜色** 给选中文字变色；**表情** 插入 emoji 😄；**表格** 拖选行列插入表格
 - 直接**粘贴截图 / 拖入图片**会自动保存并显示；从 Excel 或网页**复制的表格**粘贴后自动转成 Markdown 表格
-- **任务状态**：预览里点击任务循环切换 待办→进行中→等待→完成→废弃（不同状态不同字体颜色）；右键任务可精确设置（对应标记 - [ ] 、- [/] 、- [?] 、- [x] 、- [-] ）
+- **任务状态**：悬浮到任务项上点 **▾** 展开状态菜单（待办 / 进行中 / 等待 / 完成 / 废弃），或右键任务精确设置（对应标记 - [ ] 、- [/] 、- [?] 、- [x] 、- [-] ）；点任务前的复选框直接勾选完成
 - 侧栏「任务」页签汇总所有未完成任务；任务文本里写了日期（如 2026-10-25）会按日期排序，今天和逾期的标红
 - 便签里写 **＃标签**（如 ＃工作 ＃学习 这样的井号标签），侧栏「便签」页签顶部可按标签筛选
 - 标题栏 📌 可**置顶显示**；菜单栏「整理」一键排列所有便签、消除重叠
@@ -303,7 +303,13 @@ export function useNotes() {
       const cur = notesRef.current
       const editing = new Set(cur.filter((n) => !n.preview).map((n) => n.id))
       const freshIds = new Set(fresh.map((n) => n.id))
-      const merged = fresh.map((n) => (editing.has(n.id) ? (cur.find((c) => c.id === n.id) ?? n) : n))
+      // 正在编辑的便签以本地为准；其余便签本地不旧于磁盘时也以本地为准——
+      // 自己的写入会触发 folder-changed 重载，而落盘有 600ms 防抖，
+      // 重载落在防抖窗口内时磁盘还是旧版本，无条件采用会把刚改的状态回滚（状态反复）
+      const merged = fresh.map((n) => {
+        const c = cur.find((c) => c.id === n.id)
+        return c && (editing.has(n.id) || c.updatedAt >= n.updatedAt) ? c : n
+      })
       for (const c of cur) if (!freshIds.has(c.id)) merged.push(c)
       zTop.current = Math.max(
         zTop.current,

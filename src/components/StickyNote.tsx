@@ -7,7 +7,7 @@ import { deriveTitle } from '@/lib/note'
 import { exportNote } from '@/lib/export'
 import { saveAttachment, attachmentUrl } from '@/lib/attachments'
 import { htmlTableToMarkdown, tsvToMarkdown } from '@/lib/tablePaste'
-import { handleEnter, handleTab, cycleTaskAtIndex, setTaskAtIndex, cleanupMarkdown, archiveCompletedTasks, convertListItemToTask, convertTaskToListItem, TASK_STATUS_META } from '@/lib/editor'
+import { handleEnter, handleTab, setTaskAtIndex, cleanupMarkdown, archiveCompletedTasks, convertListItemToTask, convertTaskToListItem, extractTasks, TASK_STATUS_META } from '@/lib/editor'
 import type { TaskStatus } from '@/lib/editor'
 import { Markdown } from './Markdown'
 import { FormatBar } from './FormatBar'
@@ -182,43 +182,61 @@ export const StickyNote = memo(function StickyNote({
 
   // 预览区交互：
   // - 双击（dblclick + pointerup 时间戳双通道）进入编辑，兼容不派发 dblclick 的环境
-  // - 点击任务项（checkbox 或状态徽章）：循环切换 待办→进行中→等待→完成→废弃
-  // - 右键任务项：弹出状态选择菜单
+  // - 任务项不再点击循环切换状态（易误触）：点复选框 = 直接标记完成（再点回待办）；
+  //   悬浮出现的 ▾ 展开状态菜单；右键任务项也可精确设置状态
   useEffect(() => {
     const el = previewRef.current
     if (!note.preview || !el) return
     const enterEdit = () => onUpdate(note.id, { preview: false })
     let lastUp = 0
     let lastToggle = 0
-    const onDbl = () => enterEdit()
-    const taskLi = (t: EventTarget | null): HTMLLIElement | null =>
-      t instanceof HTMLElement ? (t.closest('li.task-item') as HTMLLIElement | null) : null
-    // 用位移判定拖拽（拖选文字），比检查 selection 更可靠：
-    // 有预存选区时单击任务不应被误拦截
+    const onDbl = (e: MouseEvent) => {
+      // ▾ 箭头用于打开状态菜单，其上的双击不进编辑
+      if (e.target instanceof Element && e.target.closest('.task-status-trigger')) return
+      enterEdit()
+    }
+    // 用位移判定拖拽（拖选文字）：拖动超过阈值不当作点击
     let downX = 0
     let downY = 0
     const onDownPos = (e: PointerEvent) => {
       downX = e.clientX
       downY = e.clientY
     }
-    const cycleTask = (li: HTMLLIElement, e: PointerEvent) => {
-      const now = Date.now()
-      if (now - lastToggle < 300) return
-      if (Math.hypot(e.clientX - downX, e.clientY - downY) > 6) return
-      lastToggle = now
-      const items = Array.from(el.querySelectorAll('li.task-item'))
-      const idx = items.indexOf(li)
-      if (idx < 0) return
-      const next = cycleTaskAtIndex(note.content, idx)
-      if (next !== null) onUpdate(note.id, { content: next })
+    const taskIndexOf = (node: Element | null): number => {
+      const li = node?.closest('li.task-item') as HTMLLIElement | null
+      if (!li || !el.contains(li)) return -1
+      return Array.from(el.querySelectorAll('li.task-item')).indexOf(li)
     }
     const onUp = (e: PointerEvent) => {
       if (e.button !== 0) return
-      const li = taskLi(e.target)
-      if (li) {
-        cycleTask(li, e)
+      // 注意必须是 Element 而非 HTMLElement：▾ 按钮里的内联 svg 不是 HTMLElement
+      const t = e.target
+      if (!(t instanceof Element)) return
+      // 悬浮 ▾ 箭头：在箭头处展开状态菜单
+      if (t.closest('.task-status-trigger')) {
+        if (Math.hypot(e.clientX - downX, e.clientY - downY) > 6) return
+        const idx = taskIndexOf(t)
+        if (idx >= 0) {
+          const rect = el.getBoundingClientRect()
+          setCtxMenu({ x: e.clientX - rect.left, y: e.clientY - rect.top, kind: 'status', index: idx })
+        }
         return
       }
+      // 复选框：点击直接标记完成；已完成再点回待办
+      if (t instanceof HTMLInputElement && t.type === 'checkbox') {
+        const now = Date.now()
+        if (now - lastToggle < 300) return
+        if (Math.hypot(e.clientX - downX, e.clientY - downY) > 6) return
+        lastToggle = now
+        const idx = taskIndexOf(t)
+        if (idx < 0) return
+        const li = el.querySelectorAll('li.task-item')[idx] as HTMLLIElement
+        const status: TaskStatus = li.dataset.status === 'done' ? 'todo' : 'done'
+        const next = setTaskAtIndex(note.content, idx, status)
+        if (next !== null) onUpdate(note.id, { content: next })
+        return
+      }
+      // 其余区域（含任务项文本）：双击进编辑
       const now = Date.now()
       if (now - lastUp < 450) {
         lastUp = 0
@@ -228,14 +246,14 @@ export const StickyNote = memo(function StickyNote({
       }
     }
     const onClickCap = (e: MouseEvent) => {
-      // 阻止原生 checkbox 默认翻转（状态由源码驱动，pointerup 已处理循环）
+      // 阻止原生 checkbox 默认翻转（勾选状态由源码驱动，pointerup 已处理）
       if (e.target instanceof HTMLInputElement && e.target.type === 'checkbox') {
         e.preventDefault()
       }
     }
     const onContext = (e: MouseEvent) => {
       const t = e.target
-      if (!(t instanceof HTMLElement)) return
+      if (!(t instanceof Element)) return
       const li = t.closest('li')
       if (!li || !el.contains(li)) return
       e.preventDefault()
@@ -659,6 +677,12 @@ export const StickyNote = memo(function StickyNote({
 
   const iconBtn = 'p-1 rounded hover:bg-black/10 text-black/55 hover:text-black/80 transition-colors'
 
+  // 状态菜单对应的任务当前状态（菜单里打勾标示）
+  const ctxTaskStatus =
+    ctxMenu?.kind === 'status'
+      ? extractTasks(note.content).find((t) => t.index === ctxMenu.index)?.status
+      : undefined
+
   return (
     <div
       ref={rootRef}
@@ -826,7 +850,10 @@ export const StickyNote = memo(function StickyNote({
               <div
                 ref={previewRef}
                 className="h-full overflow-y-auto px-3 py-2 select-text"
-                onDoubleClick={() => onUpdate(note.id, { preview: false })}
+                onDoubleClick={(e) => {
+                  if ((e.target as HTMLElement).closest('.task-status-trigger')) return
+                  onUpdate(note.id, { preview: false })
+                }}
                 title="双击切换到编辑"
               >
                 <Markdown source={note.content} />
@@ -901,6 +928,7 @@ export const StickyNote = memo(function StickyNote({
                           style={{ backgroundColor: TASK_STATUS_META[s].color }}
                         />
                         {TASK_STATUS_META[s].label}
+                        {s === ctxTaskStatus && <Check size={12} className="ml-auto text-black/45" />}
                       </button>
                     ))}
                     <div className="my-1 border-t border-black/10" />

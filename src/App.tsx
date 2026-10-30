@@ -150,34 +150,28 @@ export default function App() {
     [notes, bringToFront, updateNote, scrollToNote],
   )
 
-  // 自动整理：流式排列所有便签，消除重叠；放不下的错位层叠
+  // 自动整理：流式排列所有便签，消除重叠；一屏放不下往下续排（画布自动扩展，滚动可达）
   const tidyNotes = useCallback(() => {
     const vw = window.innerWidth
-    const vh = window.innerHeight - MENU_H // 滚动层高度
     const margin = 16
     const gap = 12
     const top = 16
     let x = margin
     let y = top
     let rowH = 0
-    let overflow = 0
     const sorted = [...notes].sort((a, b) => a.z - b.z)
     for (const n of sorted) {
+      // 比视口还宽的便签收缩到可容纳宽度并写回，否则必然盖住相邻便签
       const w = Math.min(n.width, vw - margin * 2)
-      const h = n.collapsed ? 28 : Math.min(n.height, vh - top - margin)
+      const h = n.collapsed ? 28 : n.height
       if (x > margin && x + w > vw - margin) {
         x = margin
         y += rowH + gap
         rowH = 0
       }
-      if (y + h > vh - margin) {
-        // 垂直方向放不下了：错位起一叠，尽量避免完全遮住
-        overflow += 1
-        x = margin + overflow * 28
-        y = top + overflow * 28
-        rowH = 0
+      if (n.x !== x || n.y !== y || n.width !== w) {
+        updateNote(n.id, n.width === w ? { x, y } : { x, y, width: w })
       }
-      if (n.x !== x || n.y !== y) updateNote(n.id, { x, y })
       x += w + gap
       rowH = Math.max(rowH, h)
     }
