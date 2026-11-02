@@ -12,6 +12,7 @@ import { useReminders } from '@/hooks/useReminders'
 import { isTauri } from '@/lib/storage'
 import { exportAllNotes } from '@/lib/export'
 import { extractTasks, dueUrgency } from '@/lib/editor'
+import { tidyLayout } from '@/lib/layout'
 import './App.css'
 
 const PIN_KEY = 'md-sticky-notes:sidebar-pinned'
@@ -120,6 +121,30 @@ export default function App() {
     [],
   )
 
+  // 便签居中完整显示（右键菜单）：无论当前在哪都滚到正中；滚动量钳制在画布范围内，
+  // 便签比视口大时贴边、保证可见部分最大；不改便签几何数据
+  const scrollNoteCenter = useCallback((x: number, y: number, width: number, height: number) => {
+    const sc = scrollRef.current
+    if (!sc) return
+    const targetX = x + width / 2 - sc.clientWidth / 2
+    const targetY = y + height / 2 - sc.clientHeight / 2
+    sc.scrollLeft = Math.max(0, Math.min(targetX, sc.scrollWidth - sc.clientWidth))
+    sc.scrollTop = Math.max(0, Math.min(targetY, sc.scrollHeight - sc.clientHeight))
+  }, [])
+
+  const centerNote = useCallback(
+    (id: string) => {
+      const target = notes.find((n) => n.id === id)
+      if (!target) return
+      bringToFront(id)
+      if (target.collapsed) updateNote(id, { collapsed: false })
+      requestAnimationFrame(() =>
+        scrollNoteCenter(target.x, target.y, target.width, target.height),
+      )
+    },
+    [notes, bringToFront, updateNote, scrollNoteCenter],
+  )
+
   const handleJump = useCallback(
     (jump: SearchJump) => {
       const target = notes.find((n) => n.id === jump.noteId)
@@ -151,31 +176,14 @@ export default function App() {
     [notes, bringToFront, updateNote, scrollToNote],
   )
 
-  // 自动整理：流式排列所有便签，消除重叠；一屏放不下往下续排（画布自动扩展，滚动可达）
+  // 自动整理：一屏收纳（lib 布局纯函数产补丁）——原尺寸放不下时等比缩小，
+  // 触宽度下限回退续排；画布放不下仍可滚动（现状回退行为）
   const tidyNotes = useCallback(() => {
-    const vw = window.innerWidth
-    const margin = 16
-    const gap = 12
-    const top = 16
-    let x = margin
-    let y = top
-    let rowH = 0
-    const sorted = [...notes].sort((a, b) => a.z - b.z)
-    for (const n of sorted) {
-      // 比视口还宽的便签收缩到可容纳宽度并写回，否则必然盖住相邻便签
-      const w = Math.min(n.width, vw - margin * 2)
-      const h = n.collapsed ? 28 : n.height
-      if (x > margin && x + w > vw - margin) {
-        x = margin
-        y += rowH + gap
-        rowH = 0
-      }
-      if (n.x !== x || n.y !== y || n.width !== w) {
-        updateNote(n.id, n.width === w ? { x, y } : { x, y, width: w })
-      }
-      x += w + gap
-      rowH = Math.max(rowH, h)
-    }
+    const patches = tidyLayout(
+      notes.map((n) => ({ id: n.id, width: n.width, height: n.height, collapsed: n.collapsed, z: n.z })),
+      { width: window.innerWidth, height: window.innerHeight },
+    )
+    for (const p of patches) updateNote(p.id, p)
     // 整理完回到左上角
     scrollRef.current?.scrollTo({ top: 0, left: 0 })
   }, [notes, updateNote])
@@ -241,6 +249,7 @@ export default function App() {
               onUpdate={updateNote}
               onDelete={deleteNote}
               onFocus={bringToFront}
+              onCenter={centerNote}
               reveal={reveal && reveal.noteId === note.id ? reveal : null}
               flashing={flashId === note.id}
               snapTargets={geometries}

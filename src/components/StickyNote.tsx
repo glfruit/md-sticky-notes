@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react'
-import { Calendar, Clock, CalendarClock, Eye, PencilLine, Check, Download, Pin } from 'lucide-react'
+import { Calendar, Clock, CalendarClock, Eye, PencilLine, Check, Download, Pin, LocateFixed } from 'lucide-react'
 import type { StickyNoteData } from '@/types/note'
 import { NOTE_COLORS, COLOR_ORDER, MIN_W, MIN_H } from '@/types/note'
 import { formatDate, formatTime, formatDateTime, formatUpdatedAt } from '@/lib/datetime'
@@ -28,6 +28,8 @@ interface Props {
   onFocus: (id: string) => void
   /** 搜索跳转：切到编辑模式并选中 [start, end) 区间 */
   reveal?: RevealTarget | null
+  /** 右键菜单「居中完整显示」：滚动画布让该便签居中完整可见 */
+  onCenter?: (id: string) => void
   /** 侧栏选中后高亮闪烁 */
   flashing?: boolean
   /** 全部便签的几何信息（拖动吸附用，内部排除自身） */
@@ -44,6 +46,7 @@ export const StickyNote = memo(function StickyNote({
   onUpdate,
   onDelete,
   onFocus,
+  onCenter,
   reveal,
   flashing,
   snapTargets,
@@ -87,8 +90,19 @@ export const StickyNote = memo(function StickyNote({
   const [ctxMenu, setCtxMenu] = useState<
     | { x: number; y: number; kind: 'status'; index: number }
     | { x: number; y: number; kind: 'convert'; listIndex: number }
+    | { x: number; y: number; kind: 'note' }
     | null
   >(null)
+
+  // 右键菜单打开时 Esc 关闭（window 级：菜单打开时焦点不在便签上）
+  useEffect(() => {
+    if (!ctxMenu) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setCtxMenu(null)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [ctxMenu])
 
   const setTaskStatus = useCallback(
     (index: number, status: TaskStatus) => {
@@ -260,7 +274,13 @@ export const StickyNote = memo(function StickyNote({
       const t = e.target
       if (!(t instanceof Element)) return
       const li = t.closest('li')
-      if (!li || !el.contains(li)) return
+      if (!li || !el.contains(li)) {
+        // 空白区右键：便签菜单（居中完整显示）
+        e.preventDefault()
+        const rect = el.getBoundingClientRect()
+        setCtxMenu({ x: e.clientX - rect.left, y: e.clientY - rect.top, kind: 'note' })
+        return
+      }
       e.preventDefault()
       const rect = el.getBoundingClientRect()
       const x = e.clientX - rect.left
@@ -974,7 +994,7 @@ export const StickyNote = memo(function StickyNote({
                       转为普通条目
                     </button>
                   </>
-                ) : (
+                ) : ctxMenu.kind === 'convert' ? (
                   <button
                     className="flex w-full items-center gap-2 px-2.5 py-1.5 rounded hover:bg-black/5 text-left whitespace-nowrap text-[12px] text-black/75"
                     onClick={() => {
@@ -984,6 +1004,17 @@ export const StickyNote = memo(function StickyNote({
                   >
                     <span className="w-3.5 h-3.5 rounded-sm border border-black/40 shrink-0" />
                     转换为任务
+                  </button>
+                ) : (
+                  <button
+                    className="flex w-full items-center gap-2 px-2.5 py-1.5 rounded hover:bg-black/5 text-left whitespace-nowrap text-[12px] text-black/75"
+                    onClick={() => {
+                      onCenter?.(note.id)
+                      setCtxMenu(null)
+                    }}
+                  >
+                    <LocateFixed size={12} className="text-black/45 shrink-0" />
+                    居中完整显示
                   </button>
                 )}
               </div>
