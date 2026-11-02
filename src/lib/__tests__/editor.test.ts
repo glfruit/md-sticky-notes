@@ -12,6 +12,7 @@ import {
   extractDueDate,
   extractTaskTime,
   extractTasks,
+  taskProgress,
   archiveCompletedTasks,
   convertListItemToTask,
   convertTaskToListItem,
@@ -185,6 +186,35 @@ describe('日期时间提取', () => {
       new Date(now.getFullYear(), now.getMonth(), now.getDate(), 15, 30).getTime(),
     )
     expect(extractTaskTime('非法 25:00')).toBeNull()
+  })
+})
+
+describe('taskProgress 任务进度', () => {
+  it('无任务返回 null（空文 / 纯文本 / 普通列表项）', () => {
+    expect(taskProgress('')).toBeNull()
+    expect(taskProgress('只是一段文字\n没有任务')).toBeNull()
+    expect(taskProgress('- 普通条目\n- 另一条')).toBeNull()
+  })
+
+  it('五态混合计数：done + cancelled 计入已完成，全部计入总数', () => {
+    const content = [
+      '- [ ] 待办',
+      '- [/] 进行中',
+      '- [?] 等待',
+      '- [x] 完成',
+      '- [-] 废弃',
+    ].join('\n')
+    expect(taskProgress(content)).toEqual({ done: 2, total: 5 })
+  })
+
+  it('围栏代码块内的任务样例不计入', () => {
+    const content = '- [x] 真任务\n```md\n- [ ] 伪任务\n- [x] 伪完成\n```\n- [ ] 另一个真任务'
+    expect(taskProgress(content)).toEqual({ done: 1, total: 2 })
+  })
+
+  it('「## 归档」区任务计入统计', () => {
+    const content = '- [ ] 待办\n\n## 归档\n\n- [x] 已完成\n- [-] 已废弃'
+    expect(taskProgress(content)).toEqual({ done: 2, total: 3 })
   })
 })
 

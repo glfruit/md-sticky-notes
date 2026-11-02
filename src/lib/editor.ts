@@ -389,6 +389,16 @@ export function extractTasks(content: string): TaskEntry[] {
   return out
 }
 
+/** 预览标题栏的任务进度：已完成 / 全部。已完成 = done + cancelled（与侧栏
+ *  「未完成 = todo/progress/waiting」互补）；无任务返回 null。计数与
+ *  extractTasks 同源：跳过围栏代码块，「## 归档」区任务计入。 */
+export function taskProgress(content: string): { done: number; total: number } | null {
+  const tasks = extractTasks(content)
+  if (tasks.length === 0) return null
+  const done = tasks.filter((t) => t.status === 'done' || t.status === 'cancelled').length
+  return { done, total: tasks.length }
+}
+
 /**
  * 把已完成 / 废弃的任务移到便签底部的「## 归档」区。
  * 已有归档区则追加到文末（归档区约定在最后）；没有可归档任务时返回 null。

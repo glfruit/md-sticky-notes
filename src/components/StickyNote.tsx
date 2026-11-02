@@ -8,7 +8,7 @@ import { exportNote } from '@/lib/export'
 import { saveAttachment, attachmentUrl } from '@/lib/attachments'
 import { htmlTableToMarkdown, tsvToMarkdown } from '@/lib/tablePaste'
 import { highlightMatches } from '@/lib/highlight'
-import { handleEnter, handleTab, setTaskAtIndex, cleanupMarkdown, archiveCompletedTasks, convertListItemToTask, convertTaskToListItem, extractTasks, TASK_STATUS_META } from '@/lib/editor'
+import { handleEnter, handleTab, setTaskAtIndex, cleanupMarkdown, archiveCompletedTasks, convertListItemToTask, convertTaskToListItem, extractTasks, taskProgress, TASK_STATUS_META } from '@/lib/editor'
 import type { TaskStatus } from '@/lib/editor'
 import { Markdown } from './Markdown'
 import { FormatBar } from './FormatBar'
@@ -51,6 +51,8 @@ export const StickyNote = memo(function StickyNote({
   canvasRef,
 }: Props) {
   const colors = NOTE_COLORS[note.color]
+  // 预览模式任务进度（无任务为 null）：标题栏徽标数据源，与 extractTasks 同源（跳过围栏代码块、归档区计入）
+  const progress = note.preview ? taskProgress(note.content) : null
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const rootRef = useRef<HTMLDivElement>(null)
   const previewRef = useRef<HTMLDivElement>(null)
@@ -765,9 +767,26 @@ export const StickyNote = memo(function StickyNote({
           />
         </div>
 
-        {/* 标题 */}
-        <div className="flex-1 text-center text-[12px] font-medium text-black/60 truncate px-1">
-          {deriveTitle(note.content)}
+        {/* 标题 + 预览模式任务进度（无任务不显示，编辑模式不渲染） */}
+        <div className="flex-1 flex items-center justify-center gap-1.5 min-w-0 px-1">
+          <span className="text-[12px] font-medium text-black/60 truncate">
+            {deriveTitle(note.content)}
+          </span>
+          {progress && (
+            <span
+              className="shrink-0 whitespace-nowrap text-[10px] leading-none font-medium tabular-nums"
+              style={{
+                color:
+                  progress.done === progress.total
+                    ? TASK_STATUS_META.done.color
+                    : TASK_STATUS_META.todo.color,
+              }}
+              title={`已完成 ${progress.done}/${progress.total} 个任务`}
+              aria-label={`已完成 ${progress.done}/${progress.total} 个任务`}
+            >
+              {progress.done}/{progress.total}
+            </span>
+          )}
         </div>
 
         {/* 日期时间插入 */}
