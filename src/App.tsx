@@ -18,7 +18,7 @@ const PIN_KEY = 'md-sticky-notes:sidebar-pinned'
 const MENU_H = 28
 
 export default function App() {
-  const { notes, trash, addNote, updateNote, deleteNote, bringToFront, switchFolder, cleanAttachments, restoreTrashNote, permanentlyDeleteTrash } = useNotes()
+  const { notes, trash, addNote, updateNote, deleteNote, bringToFront, switchFolder, cleanAttachments, flushPendingSaves, restoreTrashNote, permanentlyDeleteTrash } = useNotes()
   const scrollRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLDivElement>(null)
   const [searchOpen, setSearchOpen] = useState(false)
@@ -248,6 +248,7 @@ export default function App() {
         <StorageSettings
           onClose={() => setStorageOpen(false)}
           onSwitchFolder={switchFolder}
+          onFlushPending={flushPendingSaves}
           onCleanAttachments={cleanAttachments}
         />
       )}

@@ -15,6 +15,89 @@ fn path_exists(path: String) -> bool {
     Path::new(&path).exists()
 }
 
+/// 已知「非文件提供方」云盘同步根（相对 HOME）：坚果云客户端自管目录 + 旧版 Dropbox 挂载路径。
+/// macOS 文件提供方服务（Dropbox / OneDrive / Google Drive / Box 等）统一挂在
+/// ~/Library/CloudStorage/ 下，运行时枚举该目录即可，无需逐个硬编码。
+const SYNC_ROOT_CANDIDATES: &[&str] = &["Nutstore Files", "我的坚果云", "Dropbox"];
+
+/// 在候选同步根里找出包含 target 的那一个（嵌套时取最长前缀），返回服务显示名
+fn sync_root_for(target: &Path, roots: &[(std::path::PathBuf, String)]) -> Option<String> {
+    roots
+        .iter()
+        .filter(|(root, _)| target.starts_with(root))
+        .max_by_key(|(root, _)| root.components().count())
+        .map(|(_, name)| name.clone())
+}
+
+/// 检测路径是否位于云盘同步目录内，返回服务名（如 "Dropbox" / "Nutstore Files" / "iCloud Drive"），
+/// 不在任何同步目录内返回空串。切换同步文件夹前用来提醒用户 / 决定是否自动迁移。
+#[tauri::command]
+fn detect_sync_root(path: String) -> Result<String, String> {
+    let home = std::path::PathBuf::from(std::env::var("HOME").unwrap_or_default());
+    let mut roots: Vec<(std::path::PathBuf, String)> = Vec::new();
+    let cs = home.join("Library/CloudStorage");
+    if let Ok(entries) = fs::read_dir(&cs) {
+        for e in entries.flatten() {
+            roots.push((e.path(), e.file_name().to_string_lossy().into_owned()));
+        }
+    }
+    roots.push((
+        home.join("Library/Mobile Documents/com~apple~CloudDocs"),
+        "iCloud Drive".to_string(),
+    ));
+    for c in SYNC_ROOT_CANDIDATES {
+        roots.push((home.join(c), (*c).to_string()));
+    }
+    Ok(sync_root_for(Path::new(&path), &roots).unwrap_or_default())
+}
+
+/// 把 src 目录下的全部文件复制到 dst 目录（不递归，目标已存在的同名文件跳过不覆盖），返回复制数
+fn copy_dir_files(src: &Path, dst: &Path) -> Result<usize, String> {
+    if !src.exists() {
+        return Ok(0);
+    }
+    fs::create_dir_all(dst).map_err(|e| e.to_string())?;
+    let mut n = 0;
+    for entry in fs::read_dir(src).map_err(|e| e.to_string())?.flatten() {
+        let p = entry.path();
+        if !p.is_file() {
+            continue;
+        }
+        let target = dst.join(entry.file_name());
+        if target.exists() {
+            continue;
+        }
+        fs::copy(&p, &target).map_err(|e| e.to_string())?;
+        n += 1;
+    }
+    Ok(n)
+}
+
+/// 切换同步文件夹前的数据迁移：复制旧文件夹的便签、.trash/ 回收站和 attachments/ 附件。
+/// 目标已存在的同名文件一律跳过（以目标为准，保守合并不覆盖），返回 (便签, 回收站, 附件) 数量。
+#[tauri::command]
+fn copy_folder_contents(from: String, to: String) -> Result<(usize, usize, usize), String> {
+    let (src, dst) = (Path::new(&from), Path::new(&to));
+    if !src.exists() {
+        return Ok((0, 0, 0));
+    }
+    // 防呆：新旧目录相同或互为父子时拒绝（旧目录已确认存在；新目录来自系统选择器必存在）
+    let src_canon = src.canonicalize().map_err(|e| e.to_string())?;
+    let dst_canon = dst
+        .canonicalize()
+        .map_err(|e| format!("目标文件夹不可用：{e}"))?;
+    if src_canon == dst_canon
+        || src_canon.starts_with(&dst_canon)
+        || dst_canon.starts_with(&src_canon)
+    {
+        return Err("目标文件夹与当前文件夹相同或互为父子目录，无法迁移".to_string());
+    }
+    let notes = copy_dir_files(src, dst)?;
+    let trash = copy_dir_files(&src.join(".trash"), &dst.join(".trash"))?;
+    let atts = copy_dir_files(&src.join("attachments"), &dst.join("attachments"))?;
+    Ok((notes, trash, atts))
+}
+
 /// 列出同步文件夹里的所有 .md 便签，返回 (便签 id, 文件全文)
 #[tauri::command]
 fn list_notes(folder: String) -> Result<Vec<(String, String)>, String> {
@@ -267,6 +350,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             home_dir,
             path_exists,
+            detect_sync_root,
+            copy_folder_contents,
             list_notes,
             write_note,
             delete_note,
@@ -279,4 +364,59 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while building tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::path::PathBuf;
+
+    fn roots(list: &[(&str, &str)]) -> Vec<(PathBuf, String)> {
+        list.iter()
+            .map(|(p, n)| (PathBuf::from(p), n.to_string()))
+            .collect()
+    }
+
+    #[test]
+    fn sync_root_matches_full_components_only() {
+        let r = roots(&[("/h/Nutstore Files", "Nutstore Files")]);
+        assert_eq!(
+            sync_root_for(Path::new("/h/Nutstore Files/MD 便签"), &r),
+            Some("Nutstore Files".to_string())
+        );
+        // 同名字符串前缀但不同路径分量不算命中
+        assert_eq!(sync_root_for(Path::new("/h/Nutstore Files2/x"), &r), None);
+        assert_eq!(sync_root_for(Path::new("/h/Documents/x"), &r), None);
+    }
+
+    #[test]
+    fn sync_root_prefers_longest_prefix() {
+        let r = roots(&[
+            ("/h/Library/Mobile Documents", "Mobile Documents"),
+            (
+                "/h/Library/Mobile Documents/com~apple~CloudDocs",
+                "iCloud Drive",
+            ),
+        ]);
+        assert_eq!(
+            sync_root_for(Path::new("/h/Library/Mobile Documents/com~apple~CloudDocs/a.md"), &r),
+            Some("iCloud Drive".to_string())
+        );
+    }
+
+    #[test]
+    fn copy_dir_files_skips_existing_targets() {
+        let base = std::env::temp_dir().join(format!("mdsn-copy-{}", std::process::id()));
+        let (src, dst) = (base.join("src"), base.join("dst"));
+        let _ = fs::remove_dir_all(&base);
+        fs::create_dir_all(&src).unwrap();
+        fs::write(src.join("a.md"), "new").unwrap();
+        fs::write(src.join("b.md"), "new").unwrap();
+        fs::create_dir_all(&dst).unwrap();
+        fs::write(dst.join("a.md"), "old").unwrap();
+        assert_eq!(copy_dir_files(&src, &dst).unwrap(), 1);
+        assert_eq!(fs::read_to_string(dst.join("a.md")).unwrap(), "old");
+        assert_eq!(fs::read_to_string(dst.join("b.md")).unwrap(), "new");
+        let _ = fs::remove_dir_all(&base);
+    }
 }
