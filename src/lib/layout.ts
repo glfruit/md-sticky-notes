@@ -1,8 +1,8 @@
 /** 整理布局纯函数层：一屏收纳的尺寸/位置计算，不 import React、不碰 DOM。
  *  供 App 的 tidyNotes 消费：产出的补丁批量写回便签。 */
 
-/** 与菜单栏高度一致（ maximize 的 innerHeight - 60 同源） */
-const MENU_BAR_H = 40
+/** 菜单栏高度（App MENU_H 同值；maximize 的 innerHeight−60 即 28+上下边距 16×2） */
+const MENU_BAR_H = 28
 /** 网格边距 / 间距 / 首行纵坐标（原 tidyNotes 现值） */
 const MARGIN = 16
 const GAP = 12
@@ -31,17 +31,24 @@ export interface TidyPatch {
 /** 折叠便签的行高（标题栏高度，StickyNote 标题栏 h-7 + 边框） */
 const COLLAPSED_H = 28
 
+/** flowLayout 的一行结果：生效位置/宽高 + 尺寸是否相对源数据变化 */
+interface PlacedNote {
+  id: string
+  x: number
+  y: number
+  w: number
+  h: number
+  widthChanged: boolean
+  heightChanged: boolean
+}
+
 /** 流式网格：一行放不下换行。返回每张便签的位置与生效宽高及尺寸是否变化。 */
-function flowLayout(
-  notes: TidyNoteInput[],
-  scale: number,
-  viewportWidth: number,
-): { id: string; x: number; y: number; w: number; h: number; widthChanged: boolean; heightChanged: boolean }[] {
+function flowLayout(notes: TidyNoteInput[], scale: number, viewportWidth: number): PlacedNote[] {
   const maxW = viewportWidth - MARGIN * 2
   let x = MARGIN
   let y = TOP
   let rowH = 0
-  const placed: { id: string; x: number; y: number; w: number; h: number; widthChanged: boolean; heightChanged: boolean }[] = []
+  const placed: PlacedNote[] = []
   for (const n of notes) {
     // 折叠便签宽不参与缩放，仅保留超宽收缩
     const w = n.collapsed ? Math.min(n.width, maxW) : Math.min(Math.round(n.width * scale), maxW)

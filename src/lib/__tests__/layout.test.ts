@@ -20,20 +20,23 @@ describe('tidyLayout 一屏收纳布局', () => {
     expect(patches[1]).toEqual({ id: 'b', x: 328, y: 16 })
   })
 
-  it('放不下：全部展开便签等比缩小收进一屏（12 张 300×240 → 0.8 倍 240×192）', () => {
+  it('放不下：全部展开便签等比缩小收进一屏（12 张 300×240 → 0.85 倍 255×204）', () => {
     const notes = Array.from({ length: 12 }, (_, i) => mk(`n${i}`, 300, 240, i))
     const patches = tidyLayout(notes, { width: 1180, height: 700 })
-    // 手算对照：可用高 700-40-16-16=628；原尺寸 3 行 744>628 需缩小；
-    // 0.8 倍后 3 行 3*192+2*12=600≤628 恰好放下
+    // 手算对照：可用高 700-28-16-16=640；原尺寸 3 行 744>640 需缩小；
+    // 0.85 倍后 4 列 3 行 3*204+2*12=636≤640 放下（0.9 倍 672>640 不行）
     expect(patches).toHaveLength(12)
     for (const p of patches) {
-      expect(p.width).toBe(240)
-      expect(p.height).toBe(192)
+      expect(p.width).toBe(255)
+      expect(p.height).toBe(204)
     }
     expect(patches[0]).toMatchObject({ x: 16, y: 16 })
-    expect(patches[3]).toMatchObject({ x: 772, y: 16 })
-    expect(patches[4]).toMatchObject({ x: 16, y: 220 })
-    expect(patches[11]).toMatchObject({ x: 772, y: 424 })
+    expect(patches[3]).toMatchObject({ x: 817, y: 16 })
+    expect(patches[4]).toMatchObject({ x: 16, y: 232 })
+    expect(patches[11]).toMatchObject({ x: 817, y: 448 })
+    // 直接断言：网格总高 ≤ 可用高（框体全部在一屏内）
+    const bottom = Math.max(...patches.map((p) => p.y + (p.height ?? 0)))
+    expect(bottom).toBeLessThanOrEqual(16 + 640)
   })
 
   it('触下限仍放不下：回退原尺寸往下续排（现状行为）', () => {
@@ -58,9 +61,20 @@ describe('tidyLayout 一屏收纳布局', () => {
     // 其余展开便签仍等比缩小
     const expanded = patches.filter((p) => p.id !== 'c')
     for (const p of expanded) {
-      expect(p.width).toBe(240)
-      expect(p.height).toBe(192)
+      expect(p.width).toBe(255)
+      expect(p.height).toBe(204)
     }
+  })
+
+  it('纯折叠便签：行高 28 叠行（COLLAPSED_H 参与布局）', () => {
+    const patches = tidyLayout(
+      [mk('c1', 300, 240, 0, true), mk('c2', 300, 240, 1, true)],
+      { width: 400, height: 700 },
+    )
+    expect(patches[0]).toMatchObject({ x: 16, y: 16 })
+    expect(patches[1]).toMatchObject({ x: 16, y: 16 + 28 + 12 })
+    expect(patches[0].width).toBeUndefined()
+    expect(patches[1].width).toBeUndefined()
   })
 
   it('超宽便签收缩到视口内（高度不动）', () => {
