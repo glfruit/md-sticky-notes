@@ -92,11 +92,18 @@ export function handleTab(
 /**
  * 切换源码中第 index 个任务复选框（- [ ] ↔ - [x]）。
  * index 与预览渲染出的复选框顺序一致；找不到返回 null。
+ * 与 extractTasks 一致跳过围栏代码块（代码块里的任务样例行不参与计数）。
  */
 export function toggleTaskAtIndex(content: string, index: number): string | null {
   const lines = content.split('\n')
   let count = -1
+  let inFence = false
   for (let i = 0; i < lines.length; i++) {
+    if (FENCE_RE.test(lines[i])) {
+      inFence = !inFence
+      continue
+    }
+    if (inFence) continue
     const m = lines[i].match(/^(\s*[-*+]\s+\[)( |x|X)(\])/)
     if (!m) continue
     count++
@@ -284,11 +291,18 @@ export const TASK_STATUS_META: Record<TaskStatus, { label: string; color: string
 }
 
 /** 把源码中第 index 个任务设置为指定状态；找不到返回 null。
- *  目标状态为「完成」且任务带 🔁 重复标记时，自动重置回待办并把日期推到下一次。 */
+ *  目标状态为「完成」且任务带 🔁 重复标记时，自动重置回待办并把日期推到下一次。
+ *  与 extractTasks 一致跳过围栏代码块，保证 index 与预览渲染顺序对齐。 */
 export function setTaskAtIndex(content: string, index: number, status: TaskStatus, now = new Date()): string | null {
   const lines = content.split('\n')
   let count = -1
+  let inFence = false
   for (let i = 0; i < lines.length; i++) {
+    if (FENCE_RE.test(lines[i])) {
+      inFence = !inFence
+      continue
+    }
+    if (inFence) continue
     const m = lines[i].match(TASK_LINE_RE)
     if (!m) continue
     count++
@@ -308,11 +322,17 @@ export function setTaskAtIndex(content: string, index: number, status: TaskStatu
 }
 
 /** 把源码中第 index 个任务切换到循环中的下一个状态；找不到返回 null。
- *  重复任务循环到「完成」时同样自动重置。 */
+ *  重复任务循环到「完成」时同样自动重置。围栏代码块内不参与计数。 */
 export function cycleTaskAtIndex(content: string, index: number, now = new Date()): string | null {
   const lines = content.split('\n')
   let count = -1
+  let inFence = false
   for (let i = 0; i < lines.length; i++) {
+    if (FENCE_RE.test(lines[i])) {
+      inFence = !inFence
+      continue
+    }
+    if (inFence) continue
     const m = lines[i].match(TASK_LINE_RE)
     if (!m) continue
     count++

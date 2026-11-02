@@ -4,6 +4,7 @@ import {
   handleTab,
   cleanupMarkdown,
   setTaskAtIndex,
+  toggleTaskAtIndex,
   cycleTaskAtIndex,
   parseRecurrence,
   nextOccurrence,
@@ -227,5 +228,39 @@ describe('列表项与任务互转', () => {
   it('越界与已是任务返回 null', () => {
     expect(convertListItemToTask('- A', 3)).toBeNull()
     expect(convertListItemToTask('- [ ] A', 0)).toBeNull()
+  })
+})
+
+describe('围栏代码块不参与任务计数（与预览渲染/侧栏一致）', () => {
+  const content = [
+    '- [ ] 真任务一',
+    '```js',
+    '- [ ] 代码块里的假任务',
+    '```',
+    '- [ ] 真任务二',
+  ].join('\n')
+
+  it('setTaskAtIndex 的 index 与 extractTasks 对齐', () => {
+    const next = setTaskAtIndex(content, 1, 'done')!
+    const lines = next.split('\n')
+    expect(lines[4]).toBe('- [x] 真任务二')
+    expect(lines[2]).toBe('- [ ] 代码块里的假任务')
+  })
+
+  it('cycleTaskAtIndex 同样跳过代码块', () => {
+    const next = cycleTaskAtIndex(content, 1)!
+    expect(next.split('\n')[4]).toBe('- [/] 真任务二')
+    expect(next.split('\n')[2]).toBe('- [ ] 代码块里的假任务')
+  })
+
+  it('toggleTaskAtIndex 同样跳过代码块', () => {
+    const next = toggleTaskAtIndex(content, 1)!
+    expect(next.split('\n')[4]).toBe('- [x] 真任务二')
+  })
+
+  it('index 落在纯代码块便签上返回 null', () => {
+    const fenced = '```js\n- [ ] 假任务\n```'
+    expect(setTaskAtIndex(fenced, 0, 'done')).toBeNull()
+    expect(extractTasks(fenced)).toEqual([])
   })
 })
