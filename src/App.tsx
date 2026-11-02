@@ -11,6 +11,7 @@ import { UpdateBanner } from '@/components/UpdateBanner'
 import { useReminders } from '@/hooks/useReminders'
 import { isTauri } from '@/lib/storage'
 import { exportAllNotes } from '@/lib/export'
+import { extractTasks, dueUrgency } from '@/lib/editor'
 import './App.css'
 
 const PIN_KEY = 'md-sticky-notes:sidebar-pinned'
@@ -123,7 +124,7 @@ export default function App() {
     (jump: SearchJump) => {
       const target = notes.find((n) => n.id === jump.noteId)
       bringToFront(jump.noteId)
-      setReveal({ noteId: jump.noteId, start: jump.start, end: jump.end, nonce: Date.now() })
+      setReveal({ noteId: jump.noteId, start: jump.start, end: jump.end, query: jump.query, nonce: Date.now() })
       setSearchOpen(false)
       if (target) {
         // 等展开 / 切编辑生效后再滚动
@@ -179,6 +180,21 @@ export default function App() {
     scrollRef.current?.scrollTo({ top: 0, left: 0 })
   }, [notes, updateNote])
 
+  // 菜单栏逾期/今天到期的任务数（点击打开侧栏任务页）
+  const dueTaskCount = useMemo(
+    () =>
+      notes.reduce(
+        (sum, n) =>
+          sum +
+          extractTasks(n.content).filter((t) => {
+            if (!t.due || t.status === 'done' || t.status === 'cancelled') return false
+            return dueUrgency(t.due).level === 'overdue' || dueUrgency(t.due).level === 'today'
+          }).length,
+        0,
+      ),
+    [notes],
+  )
+
   const sidebarVisible = sidebarPinned || sidebarHover
 
   return (
@@ -191,6 +207,7 @@ export default function App() {
         onToggleSidebar={() => setSidebarPinned((v) => !v)}
         onOpenStorage={() => setStorageOpen(true)}
         sidebarPinned={sidebarPinned}
+        dueTaskCount={dueTaskCount}
       />
 
       {/* 左侧边缘热区：鼠标靠左滑出导航栏 */}
@@ -236,7 +253,7 @@ export default function App() {
 
       {notes.length === 0 && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-          <div className="text-white/80 text-sm bg-black/25 backdrop-blur px-4 py-2 rounded-lg">
+          <div className="text-stone-600 text-sm bg-white/70 border border-stone-900/10 backdrop-blur px-4 py-2 rounded-lg">
             没有便签了 — 按 ⌥N 或点菜单栏「新建」
           </div>
         </div>

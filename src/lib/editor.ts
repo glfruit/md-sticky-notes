@@ -283,11 +283,11 @@ const STATUS_TO_MARK: Record<TaskStatus, string> = {
 const CYCLE: TaskStatus[] = ['todo', 'progress', 'waiting', 'done', 'cancelled']
 
 export const TASK_STATUS_META: Record<TaskStatus, { label: string; color: string }> = {
-  todo: { label: '待办', color: '#718096' },
-  progress: { label: '进行中', color: '#3182ce' },
-  waiting: { label: '等待', color: '#b7791f' },
-  done: { label: '完成', color: '#38a169' },
-  cancelled: { label: '废弃', color: '#a0aec0' },
+  todo: { label: '待办', color: '#78716C' },
+  progress: { label: '进行中', color: '#2563EB' },
+  waiting: { label: '等待', color: '#D97706' },
+  done: { label: '完成', color: '#059669' },
+  cancelled: { label: '废弃', color: '#A8A29E' },
 }
 
 /** 把源码中第 index 个任务设置为指定状态；找不到返回 null。
@@ -447,10 +447,10 @@ export function dueUrgency(due: string, now = new Date()): { label: string; leve
 }
 
 export const DUE_LEVEL_COLORS: Record<DueLevel, string> = {
-  overdue: '#e53e3e',
-  today: '#e53e3e',
-  soon: '#b7791f',
-  later: '#718096',
+  overdue: '#DC2626',
+  today: '#DC2626',
+  soon: '#D97706',
+  later: '#78716C',
 }
 
 // ---------- 侧栏任务分组 ----------

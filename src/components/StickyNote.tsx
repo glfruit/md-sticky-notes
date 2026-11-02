@@ -7,6 +7,7 @@ import { deriveTitle } from '@/lib/note'
 import { exportNote } from '@/lib/export'
 import { saveAttachment, attachmentUrl } from '@/lib/attachments'
 import { htmlTableToMarkdown, tsvToMarkdown } from '@/lib/tablePaste'
+import { highlightMatches } from '@/lib/highlight'
 import { handleEnter, handleTab, setTaskAtIndex, cleanupMarkdown, archiveCompletedTasks, convertListItemToTask, convertTaskToListItem, extractTasks, TASK_STATUS_META } from '@/lib/editor'
 import type { TaskStatus } from '@/lib/editor'
 import { Markdown } from './Markdown'
@@ -15,6 +16,8 @@ import { FormatBar } from './FormatBar'
 export interface RevealTarget {
   start: number
   end: number
+  /** 查询词：预览模式下高亮全部匹配（编辑模式仅选中 [start,end)） */
+  query?: string
   nonce: number
 }
 
@@ -283,6 +286,15 @@ export const StickyNote = memo(function StickyNote({
       el.removeEventListener('contextmenu', onContext, true)
     }
   }, [note.preview, note.id, note.content, onUpdate])
+
+  // 搜索跳转：预览模式下高亮便签内全部匹配（编辑模式由上方 effect 选中第一处）
+  useEffect(() => {
+    const root = previewRef.current
+    if (!note.preview || note.collapsed || !root) return
+    if (!reveal?.query) return
+    highlightMatches(root, reveal.query)
+    // 内容重渲染会重建 innerHTML（高亮丢失），因此依赖 note.content 重新高亮
+  }, [reveal, note.preview, note.collapsed, note.content])
 
   useEffect(() => {
     if (!confirmDelete) return
@@ -675,7 +687,7 @@ export const StickyNote = memo(function StickyNote({
     [note.id, note.width, note.height, onUpdate, onFocus],
   )
 
-  const iconBtn = 'p-1 rounded hover:bg-black/10 text-black/55 hover:text-black/80 transition-colors'
+  const iconBtn = 'p-1 rounded hover:bg-stone-900/8 text-stone-500 hover:text-stone-800 transition-colors'
 
   // 状态菜单对应的任务当前状态（菜单里打勾标示）
   const ctxTaskStatus =
@@ -698,8 +710,8 @@ export const StickyNote = memo(function StickyNote({
         backdropFilter: note.translucent ? 'blur(14px)' : undefined,
         border: `1px solid ${colors.border}`,
         boxShadow: flashing
-          ? '0 12px 32px rgba(0,0,0,0.28), 0 0 0 3px rgba(59,130,246,0.85)'
-          : '0 12px 32px rgba(0,0,0,0.28), 0 2px 6px rgba(0,0,0,0.15)',
+          ? '0 1px 2px rgba(28,25,23,0.10), 0 10px 28px rgba(28,25,23,0.16), 0 0 0 3px rgba(217,119,6,0.75)'
+          : '0 1px 2px rgba(28,25,23,0.10), 0 10px 28px rgba(28,25,23,0.16)',
         transition: 'box-shadow 0.3s ease',
       }}
       onPointerDown={() => onFocus(note.id)}
@@ -783,7 +795,7 @@ export const StickyNote = memo(function StickyNote({
             <Download size={13} />
           </button>
           <button
-            className={`${iconBtn} ${note.pinned ? '!text-blue-600' : ''}`}
+            className={`${iconBtn} ${note.pinned ? '!text-amber-600' : ''}`}
             onClick={() => onUpdate(note.id, { pinned: !note.pinned })}
             title={note.pinned ? '取消置顶' : '置顶显示（浮在其他便签之上）'}
           >
@@ -803,7 +815,7 @@ export const StickyNote = memo(function StickyNote({
             </button>
             {colorPickerOpen && (
               <div
-                className="absolute right-0 top-6 flex flex-col gap-1.5 p-1.5 rounded-md bg-white/95 shadow-lg border border-black/10 z-50"
+                className="absolute right-0 top-6 flex flex-col gap-1.5 p-1.5 rounded-md bg-white/95 shadow-lg border border-stone-200 z-50"
                 onPointerLeave={() => setColorPickerOpen(false)}
               >
                 <div className="flex gap-1">
@@ -905,7 +917,7 @@ export const StickyNote = memo(function StickyNote({
                 }}
               />
               <div
-                className="absolute z-40 rounded-lg bg-white/95 backdrop-blur shadow-xl border border-black/15 p-1"
+                className="absolute z-40 rounded-lg bg-white/95 backdrop-blur shadow-xl border border-stone-200 p-1"
                 style={{
                   left: Math.min(ctxMenu.x, note.width - 130),
                   top: Math.min(ctxMenu.y, note.height - 170),

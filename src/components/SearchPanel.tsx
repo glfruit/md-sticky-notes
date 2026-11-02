@@ -8,6 +8,8 @@ export interface SearchJump {
   noteId: string
   start: number
   end: number
+  /** 查询词：预览模式下便签内高亮全部匹配 */
+  query: string
 }
 
 interface Props {
@@ -70,7 +72,7 @@ export function SearchPanel({ notes, onJump, onClose }: Props) {
   )
 
   const jump = (m: NoteMatch) => {
-    onJump({ noteId: m.note.id, start: m.firstStart, end: m.firstEnd })
+    onJump({ noteId: m.note.id, start: m.firstStart, end: m.firstEnd, query: query.trim() })
   }
 
   const handleKey = (e: React.KeyboardEvent) => {
@@ -125,7 +127,7 @@ export function SearchPanel({ notes, onJump, onClose }: Props) {
                 <button
                   key={m.note.id}
                   className={`w-full flex items-start gap-3 px-4 py-2.5 text-left transition-colors ${
-                    i === active ? 'bg-blue-500/10' : 'hover:bg-black/5'
+                    i === active ? 'bg-amber-500/10' : 'hover:bg-stone-900/5'
                   }`}
                   onClick={() => jump(m)}
                   onMouseEnter={() => setActive(i)}

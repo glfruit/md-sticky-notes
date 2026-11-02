@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Plus, Search, StickyNote as StickyIcon, PackageOpen, PanelLeft, LayoutGrid, Cloud } from 'lucide-react'
+import { Plus, Search, StickyNote as StickyIcon, PackageOpen, PanelLeft, LayoutGrid, Cloud, AlarmClock } from 'lucide-react'
 import { formatMenuBar } from '@/lib/datetime'
 
 interface Props {
@@ -10,9 +10,11 @@ interface Props {
   onToggleSidebar: () => void
   onOpenStorage: () => void
   sidebarPinned: boolean
+  /** 逾期 / 今天到期的未完成任务数（0 不显示） */
+  dueTaskCount: number
 }
 
-export function MenuBar({ onNewNote, onSearch, onExportAll, onTidy, onToggleSidebar, onOpenStorage, sidebarPinned }: Props) {
+export function MenuBar({ onNewNote, onSearch, onExportAll, onTidy, onToggleSidebar, onOpenStorage, sidebarPinned, dueTaskCount }: Props) {
   const [now, setNow] = useState(() => new Date())
 
   useEffect(() => {
@@ -20,22 +22,26 @@ export function MenuBar({ onNewNote, onSearch, onExportAll, onTidy, onToggleSide
     return () => clearInterval(t)
   }, [])
 
-  const btn = 'flex items-center gap-1 px-1.5 rounded hover:bg-black/10 shrink-0'
+  const btn = 'flex items-center gap-1 px-1.5 h-5 rounded-md hover:bg-stone-900/8 shrink-0 transition-colors'
   const label = 'hidden md:inline'
 
   return (
-    <div className="fixed top-0 left-0 right-0 h-7 z-[9999] flex items-center px-3 gap-2 bg-white/55 backdrop-blur-md border-b border-black/10 text-[13px] text-black/80 select-none whitespace-nowrap overflow-hidden">
-      <StickyIcon size={14} className="text-black/70 shrink-0" />
+    <div className="fixed top-0 left-0 right-0 h-7 z-[9999] flex items-center px-3 gap-2 bg-white/60 backdrop-blur-md border-b border-stone-900/10 text-[13px] text-stone-800 select-none whitespace-nowrap overflow-hidden">
+      <StickyIcon size={14} className="text-amber-600 shrink-0" />
       <span className="font-semibold shrink-0">MD 便签</span>
       <button
-        className={`${btn} ${sidebarPinned ? 'bg-black/10' : ''}`}
+        className={`${btn} ${sidebarPinned ? 'bg-stone-900/10' : ''}`}
         onClick={onToggleSidebar}
         title="固定 / 隐藏左侧导航栏（⌥B）"
       >
         <PanelLeft size={13} />
         <span className={label}>导航</span>
       </button>
-      <button className={btn} onClick={onNewNote} title="新建便签（⌥N）">
+      <button
+        className="flex items-center gap-1 px-2 h-5 rounded-md bg-accent hover:bg-accent-hover text-white shrink-0 transition-colors"
+        onClick={onNewNote}
+        title="新建便签（⌥N）"
+      >
         <Plus size={13} />
         <span className={label}>新建</span>
       </button>
@@ -55,11 +61,21 @@ export function MenuBar({ onNewNote, onSearch, onExportAll, onTidy, onToggleSide
         <Cloud size={13} />
         <span className={label}>同步</span>
       </button>
-      <span className="hidden lg:inline text-black/40 truncate min-w-0">
+      <span className="hidden lg:inline text-stone-400 truncate min-w-0">
         ⌥D 日期 · ⌥T 时间 · ⌥⇧T 日期+时间 · ⌘E 预览 · ⌘F 搜索 · ⌥B 导航
       </span>
       <div className="flex-1" />
-      <span className="tabular-nums text-black/70 shrink-0">{formatMenuBar(now)}</span>
+      {dueTaskCount > 0 && (
+        <button
+          className="flex items-center gap-1 h-5 px-1.5 rounded-full bg-red-500/12 text-red-600 text-[11px] font-semibold shrink-0 hover:bg-red-500/20 transition-colors"
+          onClick={onToggleSidebar}
+          title="有逾期 / 今天到期的任务，点击打开任务列表"
+        >
+          <AlarmClock size={12} />
+          {dueTaskCount}
+        </button>
+      )}
+      <span className="tabular-nums text-stone-600 shrink-0">{formatMenuBar(now)}</span>
     </div>
   )
 }

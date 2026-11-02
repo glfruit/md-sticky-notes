@@ -10,8 +10,9 @@ macOS / Windows 桌面便签：一张张可拖拽的 Markdown 小窗口，内容
 > `.md` file (YAML frontmatter + Markdown body) living in *your* cloud-synced folder —
 > no account, no vendor cloud, no lock-in. Free & open source (MIT).
 
-<!-- TODO(截图)：放 2-3 张截图或 GIF（桌面多便签 / 任务五态 / 半透明+置顶），
-     发布到各渠道前补上，README 的转化率靠它们。 -->
+![桌面全景：奶油纸面画布上的多张彩色便签](docs/screenshots/desktop-overview.png)
+
+![侧栏任务分组：进行中 → 快过期/逾期 → 等待 → 待办](docs/screenshots/sidebar-tasks.png)
 
 ## 为什么做这个
 

@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { FolderOpen, HardDrive, Cloud, X, BrushCleaning, TriangleAlert } from 'lucide-react'
+import { FolderOpen, HardDrive, Cloud, X, BrushCleaning, TriangleAlert, MessageSquarePlus } from 'lucide-react'
 import { isTauri, getFolder, pickFolder, detectSyncRoot, migrateFolderData, syncRootLabel } from '@/lib/storage'
+import { openExternal } from '@/lib/openExternal'
 import { UpdaterSection } from './UpdaterSection'
 
 const PREFILL_KEY = 'md-sticky-notes:clipboard-prefill'
@@ -101,10 +102,10 @@ export function StorageSettings({ onClose, onSwitchFolder, onFlushPending, onCle
 
   return (
     <div className="fixed inset-0 z-[10000] flex items-start justify-center pt-16 bg-black/20" onPointerDown={onClose}>
-      <div
-        className="w-[440px] max-w-[90vw] rounded-xl bg-white/95 backdrop-blur-xl shadow-2xl border border-black/10 p-4"
-        onPointerDown={(e) => e.stopPropagation()}
-      >
+        <div
+          className="w-[440px] max-w-[90vw] rounded-xl bg-white/95 backdrop-blur-xl shadow-2xl border border-stone-200 p-4"
+          onPointerDown={(e) => e.stopPropagation()}
+        >
         <div className="flex items-center gap-2 mb-3">
           <Cloud size={15} className="text-black/60" />
           <span className="flex-1 text-[14px] font-semibold text-black/80">存储与同步</span>
@@ -122,7 +123,7 @@ export function StorageSettings({ onClose, onSwitchFolder, onFlushPending, onCle
             </div>
             <div className="flex gap-2 mt-2.5">
               <button
-                className="flex-1 h-8 rounded-lg bg-blue-500 hover:bg-blue-600 text-white text-[13px] disabled:opacity-50"
+                className="flex-1 h-8 rounded-lg bg-accent hover:bg-accent-hover text-white text-[13px] disabled:opacity-50"
                 onClick={changeFolder}
                 disabled={busy || cleaning}
               >
@@ -190,6 +191,23 @@ export function StorageSettings({ onClose, onSwitchFolder, onFlushPending, onCle
               把这个文件夹放在云盘同步目录里（首次启动按 坚果云 → Dropbox 顺序自动选择），
               另一台机器装同一个应用并指向同一文件夹即可同步。
               更换到云盘同步目录时，现有便签和附件会<strong>自动迁移</strong>过去；文件夹里的改动也会实时同步进来。
+            </div>
+            <div className="mt-3 pt-2.5 border-t border-black/10 flex items-center gap-1.5 text-[11px] text-black/45">
+              <MessageSquarePlus size={12} className="shrink-0" />
+              <span>遇到问题或有想法？</span>
+              <button
+                className="text-stone-600 hover:text-amber-700 underline underline-offset-2"
+                onClick={() => void openExternal('https://github.com/glfruit/md-sticky-notes/issues')}
+              >
+                提问题
+              </button>
+              <span>·</span>
+              <button
+                className="text-stone-600 hover:text-amber-700 underline underline-offset-2"
+                onClick={() => void openExternal('https://github.com/glfruit/md-sticky-notes/discussions')}
+              >
+                功能建议
+              </button>
             </div>
             <UpdaterSection />
           </>

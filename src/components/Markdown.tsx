@@ -21,6 +21,7 @@ import 'highlight.js/styles/github-dark.css'
 import DOMPurify from 'dompurify'
 import { getAttachmentUrl, attachmentId } from '@/lib/attachments'
 import { decorateTasks } from '@/lib/decorateTasks'
+import { openExternal } from '@/lib/openExternal'
 
 // 按需注册常用语言（lib/common 全量会多打包 ~170KB）
 for (const [name, lang] of Object.entries({
@@ -96,8 +97,19 @@ export function Markdown({ source }: { source: string }) {
     }
   }, [decorated])
 
+  // 预览里的链接点击：http(s)/mailto 交给系统浏览器，其余（如 attachment://）不劫持 WebView
+  const onLinkClick = (e: React.MouseEvent) => {
+    const a = (e.target as HTMLElement).closest('a')
+    if (!a) return
+    e.preventDefault()
+    const href = a.getAttribute('href') ?? ''
+    if (/^(https?|mailto):/i.test(href)) void openExternal(href)
+  }
+
   if (!source.trim()) {
     return <div className="md-body md-empty">空白便签 — 双击切换到编辑</div>
   }
-  return <div ref={rootRef} className="md-body" dangerouslySetInnerHTML={{ __html: decorated }} />
+  return (
+    <div ref={rootRef} className="md-body" onClick={onLinkClick} dangerouslySetInnerHTML={{ __html: decorated }} />
+  )
 }

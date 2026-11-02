@@ -22,12 +22,12 @@ export interface StickyNoteData {
 }
 
 export const NOTE_COLORS: Record<NoteColor, { bg: string; bar: string; border: string }> = {
-  yellow: { bg: '#fff7ae', bar: '#f5e98c', border: '#e0cd6a' },
-  blue: { bg: '#d7e7ff', bar: '#bcd4f7', border: '#9cbdea' },
-  green: { bg: '#dbf7c5', bar: '#c3eaa6', border: '#a5d484' },
-  pink: { bg: '#ffdbe4', bar: '#f7c2cf', border: '#e8a3b5' },
-  purple: { bg: '#eadbff', bar: '#d6c2f5', border: '#bda3e8' },
-  gray: { bg: '#ececea', bar: '#d9d9d5', border: '#bfbfba' },
+  yellow: { bg: '#FFF5A6', bar: '#F4E88C', border: '#DFC964' },
+  blue: { bg: '#D8E9FF', bar: '#BFD6F8', border: '#9BBEE8' },
+  green: { bg: '#DCF5C9', bar: '#C3EAAA', border: '#A2D485' },
+  pink: { bg: '#FFDCE6', bar: '#F7C4D1', border: '#E6A3B5' },
+  purple: { bg: '#EBDDFF', bar: '#D8C6F7', border: '#BFA4E8' },
+  gray: { bg: '#EFEDE8', bar: '#DCDAD3', border: '#BEBBB2' },
 }
 
 export const COLOR_ORDER: NoteColor[] = ['yellow', 'blue', 'green', 'pink', 'purple', 'gray']

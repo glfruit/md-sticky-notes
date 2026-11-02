@@ -61,7 +61,7 @@ function NoteRow({
         />
         <span className="min-w-0 flex-1">
           <span className="block text-[12.5px] font-medium text-black/75 truncate">
-            {note.pinned && <Pin size={10} className="inline mr-1 -mt-0.5 text-blue-600" />}
+            {note.pinned && <Pin size={10} className="inline mr-1 -mt-0.5 text-amber-600" />}
             {deriveTitle(note.content)}
           </span>
           <span className="block text-[11px] text-black/45 truncate">{snippet(note.content)}</span>
@@ -206,7 +206,7 @@ function TrashList({
             </span>
             <span className="flex gap-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
               <button
-                className="text-[10px] px-1.5 h-4.5 h-[18px] rounded bg-blue-500/15 text-blue-700 hover:bg-blue-500/25"
+                className="text-[10px] px-1.5 h-4.5 h-[18px] rounded bg-amber-500/15 text-amber-700 hover:bg-amber-500/25"
                 onClick={() => onRestore(note.id)}
               >
                 恢复
@@ -278,17 +278,17 @@ export function Sidebar({
   )
 
   const tabBtn = (active: boolean) =>
-    `px-2 py-0.5 rounded-full text-[11px] transition-colors ${
-      active ? 'bg-black/10 font-semibold text-black/75' : 'text-black/45 hover:bg-black/5'
+    `px-2 py-0.5 rounded-full text-[11px] whitespace-nowrap shrink-0 transition-colors ${
+      active ? 'bg-amber-500/15 font-semibold text-amber-700' : 'text-stone-500 hover:bg-stone-900/5'
     }`
 
   return (
     <div
-      className="fixed left-0 top-7 bottom-0 w-[232px] z-[9998] flex flex-col bg-white/70 backdrop-blur-xl border-r border-black/10 shadow-xl transition-transform duration-200 ease-out"
+      className="fixed left-0 top-7 bottom-0 w-[232px] z-[9998] flex flex-col bg-white/70 backdrop-blur-xl border-r border-stone-900/10 shadow-xl transition-transform duration-200 ease-out"
       style={{ transform: visible ? 'translateX(0)' : 'translateX(-100%)' }}
       onPointerLeave={onHoverLeave}
     >
-      <div className="flex items-center gap-1 px-3 h-9 border-b border-black/10 shrink-0">
+      <div className="flex items-center gap-1 px-3 h-9 border-b border-stone-900/10 shrink-0">
         <button className={tabBtn(tab === 'notes')} onClick={() => setTab('notes')}>
           便签 {notes.length}
         </button>
@@ -323,7 +323,7 @@ export function Sidebar({
                 <button
                   className={`px-1.5 h-[19px] rounded-full text-[10.5px] transition-colors ${
                     tagFilter === null
-                      ? 'bg-blue-500/15 text-blue-700 font-medium'
+                      ? 'bg-amber-500/15 text-amber-700 font-medium'
                       : 'text-black/45 hover:bg-black/5'
                   }`}
                   onClick={() => setTagFilter(null)}
@@ -335,7 +335,7 @@ export function Sidebar({
                     key={tag}
                     className={`px-1.5 h-[19px] rounded-full text-[10.5px] transition-colors ${
                       tagFilter === tag
-                        ? 'bg-blue-500/15 text-blue-700 font-medium'
+                        ? 'bg-amber-500/15 text-amber-700 font-medium'
                         : 'text-black/45 hover:bg-black/5'
                     }`}
                     onClick={() => setTagFilter(tagFilter === tag ? null : tag)}
