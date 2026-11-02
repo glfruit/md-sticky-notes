@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react'
-import { Calendar, Clock, CalendarClock, Eye, PencilLine, Check, Download, Pin, LocateFixed } from 'lucide-react'
+import { Calendar, Clock, CalendarClock, Eye, PencilLine, Check, Download, Pin } from 'lucide-react'
 import type { StickyNoteData } from '@/types/note'
 import { NOTE_COLORS, COLOR_ORDER, MIN_W, MIN_H } from '@/types/note'
 import { formatDate, formatTime, formatDateTime, formatUpdatedAt } from '@/lib/datetime'
@@ -28,8 +28,8 @@ interface Props {
   onFocus: (id: string) => void
   /** 搜索跳转：切到编辑模式并选中 [start, end) 区间 */
   reveal?: RevealTarget | null
-  /** 右键菜单「居中完整显示」：滚动画布让该便签居中完整可见 */
-  onCenter?: (id: string) => void
+  /** 便签空白区/标题栏右键：请求 App 层弹出便签菜单（视口坐标 + 便签 id） */
+  onRequestNoteMenu?: (x: number, y: number, noteId: string) => void
   /** 侧栏选中后高亮闪烁 */
   flashing?: boolean
   /** 全部便签的几何信息（拖动吸附用，内部排除自身） */
@@ -46,7 +46,7 @@ export const StickyNote = memo(function StickyNote({
   onUpdate,
   onDelete,
   onFocus,
-  onCenter,
+  onRequestNoteMenu,
   reveal,
   flashing,
   snapTargets,
@@ -90,7 +90,6 @@ export const StickyNote = memo(function StickyNote({
   const [ctxMenu, setCtxMenu] = useState<
     | { x: number; y: number; kind: 'status'; index: number }
     | { x: number; y: number; kind: 'convert'; listIndex: number }
-    | { x: number; y: number; kind: 'note' }
     | null
   >(null)
 
@@ -103,6 +102,15 @@ export const StickyNote = memo(function StickyNote({
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [ctxMenu])
+
+  // 便签根节点右键（标题栏/折叠条/编辑区等预览区之外）：请求 App 层便签菜单。
+  // 预览区内部由上方预览监听处理（任务/列表项菜单优先）
+  const onRootContextMenu = (e: React.MouseEvent) => {
+    const t = e.target
+    if (t instanceof Element && previewRef.current?.contains(t)) return
+    e.preventDefault()
+    onRequestNoteMenu?.(e.clientX, e.clientY, note.id)
+  }
 
   const setTaskStatus = useCallback(
     (index: number, status: TaskStatus) => {
@@ -277,8 +285,7 @@ export const StickyNote = memo(function StickyNote({
       if (!li || !el.contains(li)) {
         // 空白区右键：便签菜单（居中完整显示）
         e.preventDefault()
-        const rect = el.getBoundingClientRect()
-        setCtxMenu({ x: e.clientX - rect.left, y: e.clientY - rect.top, kind: 'note' })
+        onRequestNoteMenu?.(e.clientX, e.clientY, note.id)
         return
       }
       e.preventDefault()
@@ -307,7 +314,7 @@ export const StickyNote = memo(function StickyNote({
       el.removeEventListener('click', onClickCap, true)
       el.removeEventListener('contextmenu', onContext, true)
     }
-  }, [note.preview, note.id, note.content, onUpdate])
+  }, [note.preview, note.id, note.content, onUpdate, onRequestNoteMenu])
 
   // 搜索跳转：预览模式下高亮便签内全部匹配（编辑模式由上方 effect 选中第一处）
   useEffect(() => {
@@ -738,6 +745,7 @@ export const StickyNote = memo(function StickyNote({
       }}
       onPointerDown={() => onFocus(note.id)}
       onKeyDown={handleKeyDown}
+      onContextMenu={onRootContextMenu}
       onDrop={handleDrop}
       onDragOver={handleDragOver}
     >
@@ -941,7 +949,7 @@ export const StickyNote = memo(function StickyNote({
               {cleanupToast}
             </div>
           )}
-          {/* 右键菜单：任务状态 / 转换为任务 */}
+          {/* 右键菜单：任务状态 / 转换为任务（便签菜单走下方 portal） */}
           {ctxMenu && (
             <>
               <div
@@ -994,7 +1002,7 @@ export const StickyNote = memo(function StickyNote({
                       转为普通条目
                     </button>
                   </>
-                ) : ctxMenu.kind === 'convert' ? (
+                ) : (
                   <button
                     className="flex w-full items-center gap-2 px-2.5 py-1.5 rounded hover:bg-black/5 text-left whitespace-nowrap text-[12px] text-black/75"
                     onClick={() => {
@@ -1004,17 +1012,6 @@ export const StickyNote = memo(function StickyNote({
                   >
                     <span className="w-3.5 h-3.5 rounded-sm border border-black/40 shrink-0" />
                     转换为任务
-                  </button>
-                ) : (
-                  <button
-                    className="flex w-full items-center gap-2 px-2.5 py-1.5 rounded hover:bg-black/5 text-left whitespace-nowrap text-[12px] text-black/75"
-                    onClick={() => {
-                      onCenter?.(note.id)
-                      setCtxMenu(null)
-                    }}
-                  >
-                    <LocateFixed size={12} className="text-black/45 shrink-0" />
-                    居中完整显示
                   </button>
                 )}
               </div>
