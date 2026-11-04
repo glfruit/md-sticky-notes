@@ -3,12 +3,15 @@ import type { StickyNoteData, NoteColor } from '@/types/note'
 import { COLOR_ORDER } from '@/types/note'
 import { initStorage, getStorage, isTauri, setFolder } from '@/lib/storage'
 import { clearAttachmentCache, cleanOrphanAttachments } from '@/lib/attachments'
+import { findSpawnSpot, pinnedRects } from '@/lib/layout'
 
 const SEED_KEY = 'md-sticky-notes:seeded'
 /** 回收站保留 30 天 */
 const TRASH_TTL_MS = 30 * 24 * 60 * 60 * 1000
 /** z 超过该值后按现有层级整体归一化，防止长期使用后无限增长盖过应用级浮层 */
 const Z_NORMALIZE_THRESHOLD = 4000
+/** 新建便签的初始尺寸（出生定位与建卡共用） */
+const NEW_NOTE_SIZE = { width: 300, height: 320 }
 
 const WELCOME_CONTENT = `# 欢迎使用 MD 便签 📝
 
@@ -173,14 +176,22 @@ export function useNotes() {
   const addNote = useCallback(
     (content = '') => {
       const count = notesRef.current.length
+      // 出生位置避开置顶便签（#8）：置顶层恒高于普通层，撞上会被盖死无法拖动；
+      // 无空位由 findSpawnSpot 回退级联首项
+      const spot = findSpawnSpot({
+        occupied: pinnedRects(notesRef.current),
+        size: NEW_NOTE_SIZE,
+        viewport: { width: window.innerWidth, height: window.innerHeight },
+        start: count,
+      })
       const note: StickyNoteData = {
         id: genId(),
         content,
         color: COLOR_ORDER[count % COLOR_ORDER.length] as NoteColor,
-        x: 60 + ((count * 36) % 320),
-        y: 16 + ((count * 36) % 240),
-        width: 300,
-        height: 320,
+        x: spot.x,
+        y: spot.y,
+        width: NEW_NOTE_SIZE.width,
+        height: NEW_NOTE_SIZE.height,
         collapsed: false,
         preview: false,
         z: zTop.current++,

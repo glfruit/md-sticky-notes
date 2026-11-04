@@ -29,7 +29,7 @@ export interface TidyPatch {
 }
 
 /** 折叠便签的行高（标题栏高度，StickyNote 标题栏 h-7 + 边框） */
-const COLLAPSED_H = 28
+export const COLLAPSED_H = 28
 
 /** flowLayout 的一行结果：生效位置/宽高 + 尺寸是否相对源数据变化 */
 interface PlacedNote {
@@ -124,4 +124,78 @@ export function tidyLayout(
     if (p.heightChanged) patch.height = p.h
     return patch
   })
+}
+
+/** 占位矩形（AABB） */
+export interface Rect {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
+/** 宽高尺寸 */
+export interface Size {
+  width: number
+  height: number
+}
+
+/** 置顶便签的占位矩形（#8）：展开 = 完整矩形，折叠 = 标题栏条带。
+ *  「折叠取条带高」的映射知识收敛在此，调用方不再各自分支。 */
+export function pinnedRects(
+  notes: (Pick<Rect, 'x' | 'y' | 'width' | 'height'> & { collapsed: boolean; pinned?: boolean })[],
+): Rect[] {
+  return notes
+    .filter((n) => n.pinned)
+    .map((n) => ({ x: n.x, y: n.y, width: n.width, height: n.collapsed ? COLLAPSED_H : n.height }))
+}
+
+/** 出生级联偏移带：原 addNote 公式同值（60 起步、36 步进、x 循环 320 / y 循环 240） */
+const SPAWN_X0 = 60
+const SPAWN_Y0 = 16
+const SPAWN_STEP = 36
+const SPAWN_X_RANGE = 320
+const SPAWN_Y_RANGE = 240
+/** x 序列 80 步一循环、y 序列 20 步一循环，扫满 80 步即穷尽全部候选位置 */
+const SPAWN_SCAN_LIMIT = 80
+
+function cascadePos(k: number): { x: number; y: number } {
+  return {
+    x: SPAWN_X0 + ((k * SPAWN_STEP) % SPAWN_X_RANGE),
+    y: SPAWN_Y0 + ((k * SPAWN_STEP) % SPAWN_Y_RANGE),
+  }
+}
+
+function intersects(a: Rect, b: Rect): boolean {
+  return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y
+}
+
+/** 新便签出生定位（#8）：置顶层恒高于普通层，出生撞上置顶便签会被盖死无法拖动，
+ *  故沿级联偏移序列顺延，取第一个与全部占位矩形（置顶便签的展开矩形/折叠条带）
+ *  不相交、且完整落在视口内（扣除菜单栏高）的位置。
+ *  无需避让（无占位矩形）或扫满序列仍无空位时，回退序列首项（现状行为）。 */
+export function findSpawnSpot(opts: {
+  /** 需避让的占位矩形集合 */
+  occupied: Rect[]
+  /** 新便签尺寸 */
+  size: Size
+  /** 窗口视口（innerWidth/innerHeight，菜单栏高在函数内扣除，与 tidyLayout 同口径） */
+  viewport: Size
+  /** 级联序列起始序号（现有便签数） */
+  start: number
+}): { x: number; y: number } {
+  const preferred = cascadePos(opts.start)
+  if (opts.occupied.length === 0) return preferred
+  const maxBottom = opts.viewport.height - MENU_BAR_H
+  // 候选带恒出正坐标，x/y ≥ 0 检查为契约完整性兜底（防带常量调小后漏判）
+  const contained = (r: Rect) =>
+    r.x >= 0 && r.y >= 0 && r.x + r.width <= opts.viewport.width && r.y + r.height <= maxBottom
+  for (let k = opts.start; k < opts.start + SPAWN_SCAN_LIMIT; k++) {
+    const p = cascadePos(k)
+    const rect: Rect = { x: p.x, y: p.y, width: opts.size.width, height: opts.size.height }
+    if (!contained(rect)) continue
+    if (opts.occupied.some((o) => intersects(rect, o))) continue
+    return p
+  }
+  return preferred
 }
