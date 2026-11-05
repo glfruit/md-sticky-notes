@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
 import { LocateFixed } from 'lucide-react'
 import { useNotes } from '@/hooks/useNotes'
 import { StickyNote } from '@/components/StickyNote'
 import type { RevealTarget } from '@/components/StickyNote'
+import { Menu, MenuItem } from '@/components/Menu'
 import { MenuBar } from '@/components/MenuBar'
 import { SearchPanel } from '@/components/SearchPanel'
 import type { SearchJump } from '@/components/SearchPanel'
@@ -147,19 +147,13 @@ export default function App() {
     [notes, bringToFront, updateNote, scrollNoteCenter],
   )
 
-  // 便签右键菜单（App 层持有状态：菜单 portal 到 body，不受便签树 overflow 裁切）
+  // 便签右键菜单：状态属主在 App（「居中完整显示」是跨便签操作），
+  // 渲染 / Escape / 钳制 / 互斥语义全在 Menu 原语
   const [noteMenu, setNoteMenu] = useState<{ x: number; y: number; noteId: string } | null>(null)
   const openNoteMenu = useCallback((x: number, y: number, noteId: string) => {
     setNoteMenu({ x, y, noteId })
   }, [])
-  useEffect(() => {
-    if (!noteMenu) return
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setNoteMenu(null)
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [noteMenu])
+  const closeNoteMenu = useCallback(() => setNoteMenu(null), [])
 
   const handleJump = useCallback(
     (jump: SearchJump) => {
@@ -296,39 +290,20 @@ export default function App() {
       )}
       <UpdateBanner />
 
-      {/* 便签右键菜单：portal 到 body（视口坐标 fixed，贴住真实点击位置） */}
-      {noteMenu &&
-        createPortal(
-          <>
-            <div
-              className="fixed inset-0 z-[9999] cursor-default"
-              onPointerDown={() => setNoteMenu(null)}
-              onContextMenu={(e) => {
-                e.preventDefault()
-                setNoteMenu(null)
-              }}
-            />
-            <div
-              className="fixed z-[9999] rounded-lg bg-white/95 backdrop-blur shadow-xl border border-stone-200 p-1"
-              style={{
-                left: Math.min(noteMenu.x, window.innerWidth - 150),
-                top: Math.min(noteMenu.y, window.innerHeight - 60),
-              }}
-            >
-              <button
-                className="flex w-full items-center gap-2 px-2.5 py-1.5 rounded hover:bg-black/5 text-left whitespace-nowrap text-[12px] text-black/75"
-                onClick={() => {
-                  centerNote(noteMenu.noteId)
-                  setNoteMenu(null)
-                }}
-              >
-                <LocateFixed size={12} className="text-black/45 shrink-0" />
-                居中完整显示
-              </button>
-            </div>
-          </>,
-          document.body,
-        )}
+      {/* 便签右键菜单（Menu 原语：视口坐标 fixed，贴住真实点击位置） */}
+      {noteMenu && (
+        <Menu x={noteMenu.x} y={noteMenu.y} onClose={closeNoteMenu}>
+          <MenuItem
+            icon={<LocateFixed size={12} className="text-black/45 shrink-0" />}
+            onClick={() => {
+              centerNote(noteMenu.noteId)
+              closeNoteMenu()
+            }}
+          >
+            居中完整显示
+          </MenuItem>
+        </Menu>
+      )}
     </div>
   )
 }
