@@ -29,6 +29,26 @@ describe('handleEnter 列表续接', () => {
     expect(r?.text).toBe('- [x] 已完成\n- [ ] ')
   })
 
+  it('进行中任务行（- [/]）回车续接为待办（#9）', () => {
+    const r = handleEnter('- [/] 写周报', 9, 9)
+    expect(r).toEqual({ text: '- [/] 写周报\n- [ ] ', selStart: 16, selEnd: 16 })
+  })
+
+  it('等待（- [?]）与废弃（- [-]）任务行回车同样续接为待办', () => {
+    expect(handleEnter('- [?] 等邮件', 9, 9)?.text).toBe('- [?] 等邮件\n- [ ] ')
+    expect(handleEnter('- [-] 废弃项', 9, 9)?.text).toBe('- [-] 废弃项\n- [ ] ')
+  })
+
+  it('空进行中任务项回车退出列表', () => {
+    const r = handleEnter('- [/]\n正文', 4, 4)
+    expect(r).toEqual({ text: '\n正文', selStart: 0, selEnd: 0 })
+  })
+
+  it('缩进的进行中任务行回车保留缩进', () => {
+    const r = handleEnter('  - [/] 子任务', 11, 11)
+    expect(r).toEqual({ text: '  - [/] 子任务\n  - [ ] ', selStart: 20, selEnd: 20 })
+  })
+
   it('有序列表回车序号递增', () => {
     const r = handleEnter('2. 第二', 6, 6)
     expect(r?.text).toBe('2. 第二\n3. ')

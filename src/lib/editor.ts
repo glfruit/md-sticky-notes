@@ -14,7 +14,9 @@ interface LineMatch {
 }
 
 function matchLine(line: string): LineMatch | null {
-  let m = line.match(/^(\s*)([-*+])\s+\[( |x|X)\]\s*(.*)$/)
+  // 任务状态字符类与 MARK_TO_STATUS 键集一致（待办/进行中/等待/完成/废弃）。
+  // #9：进行中 [/]、等待 [?]、废弃 [-] 此前漏配，回车续成了普通列表项
+  let m = line.match(/^(\s*)([-*+])\s+\[( |x|X|\/|\?|-)\]\s*(.*)$/)
   if (m) return { marker: `${m[1]}${m[2]} [ ] `, empty: !m[4].trim() }
   m = line.match(/^(\s*)([-*+])\s+(.*)$/)
   if (m) return { marker: `${m[1]}${m[2]} `, empty: !m[3].trim() }
