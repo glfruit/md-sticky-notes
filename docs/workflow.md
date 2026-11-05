@@ -18,7 +18,7 @@
 
 1. **开分支**：④ implement 开始时从最新 `main` 拉 `<type>/<issue>-<slug>`（`fix/12-dup-task`、`refactor/14-menu-owner`）；一票一分支，寿命以「一张票」为限，不跨票攒活。
 2. **高频小 commit**：agent 每完成一个可验证的小步就 commit（WIP 也 commit——commit 是 agent 的 checkpoint，出错 revert 一步即回）；只 add 显式路径，**禁止 `git add -A` / `git add .`**（防扫进无关改动）。评审发现的修正 squash 进对应 commit，不追加「修正」commit。
-3. **⑤ 验证阶梯在分支上走**：本地静态+单测 → `git push -u origin HEAD && gh pr create`（push 须用户确认）→ CI 在 PR 上跑同一套命令 → 双轴评审**对照 PR diff 做**（AI 写的代码没有人类读过，PR diff 是唯一强制的人类阅读点）→ 视觉冒烟/本地部署在分支本地照旧。
+3. **⑤ 验证阶梯在分支上走**：本地静态+单测 → `git push -u origin HEAD && gh pr create`（push 票分支免确认，#19）→ CI 在 PR 上跑同一套命令 → 双轴评审**对照 PR diff 做**（AI 写的代码没有人类读过，PR diff 是唯一强制的人类阅读点）→ 视觉冒烟/本地部署在分支本地照旧。
 4. **squash merge**（用户确认后）：一票一提交、线性历史，详尽中文 message 风格不变；merge 后自动删分支。tag 推送不受 ruleset 影响，⑥ runbook 流程不变，「main 干净已推送 CI 绿」的前置检查从此自动成立。
 5. **回滚**：出问题 `git revert <squash hash>` 整票撤销，bisect 粒度 = 票。
 
@@ -28,7 +28,7 @@
 
 ### 并行：worktree，一票一现场（#15，#17 起 agent 自动开）
 
-实现类指令（「实现 xxx」「修 #N」「继续推进候选 xxx」）由 agent 自动走启动序列：**立票（缺则补 `ready-for-agent`）→ `bash scripts/wt.sh new <分支>` 开现场 → `cd` 进去干活 → 三连绿后请用户确认 push + PR → squash 合并后回主仓 `wt.sh rm` 清现场**。主仓常驻 `main` 只作收尾/合并用；多张票并行 = 多个现场（典型：功能票 × improve-codebase-architecture 重构票），会话各自在现场目录里起，互不踩工作区。
+实现类指令（「实现 xxx」「修 #N」「继续推进候选 xxx」）由 agent 自动走启动序列：**立票（缺则补 `ready-for-agent`）→ `bash scripts/wt.sh new <分支>` 开现场 → `cd` 进去干活 → 三连绿后直接 push 分支 + 开 PR（免确认，#19）→ squash 合并（须用户确认）后回主仓 `wt.sh rm` 清现场**。主仓常驻 `main` 只作收尾/合并用；多张票并行 = 多个现场（典型：功能票 × improve-codebase-architecture 重构票），会话各自在现场目录里起，互不踩工作区。
 
 - **并行边界**：两张票触碰同一模块不并行（triage/grill 时用 blocked_by 边声明）；动 Rust 的票避免并行（cargo `target/` 4.7G/份，确需并行 `export CARGO_TARGET_DIR` 共享主仓 target，cargo 目录锁自动排队）。
 - **合并纪律**：一次只 squash 合一个 PR；合后其余现场 `git rebase main` + 重跑三连再走 PR；冲突大就 `wt.sh rm` 弃现场重开（已完成的小 commit 可 cherry-pick 捞回）。
@@ -36,7 +36,7 @@
 - **清理**：`bash scripts/wt.sh rm <现场>`；未合并分支会保留并提示（`branch -d` 语义=内容可达才删，无信息丢失），确认丢弃手动 `-D`（须用户确认）；**在现场里收尾时先 `cd` 回主仓再 rm**（git 拒绝删除当前所在的 worktree）。
 
 > 依据（2026-11 调研）：Claude Code（`claude -w`）与 Codex 桌面（managed worktree）均把 worktree 做成一等公民并行方案；社区坑=环境复制成本（node_modules/端口/共享数据库），本项目无共享后端、DB 漂移坑不存在，其余两个均有对策（脚本封 npm ci、端口自动递增）。
-> #17 两个决策点未获用户作答，按推荐/保守默认执行供否决：落点=总是开现场（贴合「说一声自动开」意图、规则无判断分支）；push 分支前仍请确认（#13 已拍板纪律不单方面松动）。
+> #17 两个决策点未获用户作答，按推荐/保守默认执行：落点=总是开现场（贴合「说一声自动开」意图、规则无判断分支）；push 分支前仍请确认——**#19 用户显式放开：push 票分支免确认**（push main/force push 仍须确认且被 ruleset 拦，merge 始终须确认）。
 
 ## ① 想法进入：`/triage`
 
