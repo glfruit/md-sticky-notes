@@ -70,6 +70,15 @@ describe('mergeNotes 合并仲裁', () => {
     expect(mergeNotes(cur, [])).toBe(cur)
   })
 
+  it('本地独有恰为 cur 尾部且磁盘侧前缀全同 → 原引用（防抖窗口内新建触发重载）', () => {
+    const a = note({ id: 'a', updatedAt: 200 })
+    const pending = note({ id: 'n', updatedAt: 300, content: '刚建还没落盘' })
+    const cur = [a, pending]
+    // 重载读到磁盘旧版 a（本地赢），磁盘还没有 n
+    const fresh = [note({ id: 'a', updatedAt: 100 })]
+    expect(mergeNotes(cur, fresh)).toBe(cur)
+  })
+
   it('磁盘新增便签进入结果（另一台机器新建同步进来）', () => {
     const a = note({ id: 'a', updatedAt: 200 })
     const remote = note({ id: 'r', updatedAt: 500, content: '远端新建' })
@@ -95,13 +104,13 @@ describe('partitionTrash 回收站 30 天分拣', () => {
     const edge = note({ id: 'edge', updatedAt: now - TRASH_TTL_MS })
     const old = note({ id: 'old', updatedAt: now - TRASH_TTL_MS - 1 })
     const recent = note({ id: 'recent', updatedAt: now - 1000 })
-    const { fresh, expired } = partitionTrash([edge, old, recent], now)
-    expect(fresh.map((n) => n.id)).toEqual(['edge', 'recent'])
+    const { kept, expired } = partitionTrash([edge, old, recent], now)
+    expect(kept.map((n) => n.id)).toEqual(['edge', 'recent'])
     expect(expired.map((n) => n.id)).toEqual(['old'])
   })
 
   it('空回收站两堆皆空', () => {
-    expect(partitionTrash([], 123)).toEqual({ fresh: [], expired: [] })
+    expect(partitionTrash([], 123)).toEqual({ kept: [], expired: [] })
   })
 })
 
@@ -128,13 +137,6 @@ describe('z 序治理', () => {
     const { notes } = normalizeZ([c, a], 'a')
     expect(notes[0]).toBe(c) // c 仍是 z=1，原对象
     expect(notes[1]).toBe(a) // a 本来就在顶，原对象
-  })
-
-  it('normalizeZ topId 不存在：原样返回并给保守 nextTop', () => {
-    const cur = [note({ id: 'a', z: 7 })]
-    const { notes, nextTop } = normalizeZ(cur, 'ghost')
-    expect(notes).toBe(cur)
-    expect(nextTop).toBe(8)
   })
 })
 

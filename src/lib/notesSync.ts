@@ -27,7 +27,15 @@ export function mergeNotes(cur: StickyNoteData[], fresh: StickyNoteData[]): Stic
     return c && (editing.has(n.id) || c.updatedAt >= n.updatedAt) ? c : n
   })
   const localOnly = cur.filter((c) => !freshIds.has(c.id))
-  if (localOnly.length === 0 && byDisk.every((n, i) => n === cur[i])) return cur
+  // 无变化短路：磁盘侧逐位同一对象，且本地独有项恰为 cur 尾部原对象
+  //（防抖窗口内新建触发 folder-changed 重载的典型形态）→ 返回 cur 免重渲染，
+  // 与旧 JSON.stringify 全量比较语义一致
+  if (
+    byDisk.every((n, i) => n === cur[i]) &&
+    localOnly.every((n, i) => n === cur[byDisk.length + i])
+  ) {
+    return cur
+  }
   return [...byDisk, ...localOnly]
 }
 
@@ -38,12 +46,12 @@ export function mergeNotes(cur: StickyNoteData[], fresh: StickyNoteData[]): Stic
 export function partitionTrash(
   trashed: StickyNoteData[],
   now = Date.now(),
-): { fresh: StickyNoteData[]; expired: StickyNoteData[] } {
+): { kept: StickyNoteData[]; expired: StickyNoteData[] } {
   const cutoff = now - TRASH_TTL_MS
-  const fresh: StickyNoteData[] = []
+  const kept: StickyNoteData[] = []
   const expired: StickyNoteData[] = []
-  for (const n of trashed) (n.updatedAt >= cutoff ? fresh : expired).push(n)
-  return { fresh, expired }
+  for (const n of trashed) (n.updatedAt >= cutoff ? kept : expired).push(n)
+  return { kept, expired }
 }
 
 // ---------- z 序治理 ----------
@@ -55,15 +63,13 @@ export function nextZTop(notes: StickyNoteData[]): number {
 
 /** z 序归一化：按现有层级压回 1..n、目标便签置顶；保持原数组顺序，
  *  z 未变的项返回原对象（调用方以此判定哪些便签需要写盘）。
- *  topId 须存在于 notes（调用方保证）。 */
+ *  前置条件：topId ∈ notes（调用方 findIndex 已判定存在）。 */
 export function normalizeZ(
   notes: StickyNoteData[],
   topId: string,
 ): { notes: StickyNoteData[]; nextTop: number } {
-  const top = notes.find((n) => n.id === topId)
-  if (!top) return { notes, nextTop: nextZTop(notes) }
   const seq = [...notes].sort((a, b) => a.z - b.z).filter((n) => n.id !== topId)
-  seq.push(top)
+  seq.push(notes.find((n) => n.id === topId)!)
   const rank = new Map(seq.map((n, i) => [n.id, i + 1]))
   const next = notes.map((n) => {
     const z = rank.get(n.id)!

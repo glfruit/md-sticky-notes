@@ -66,9 +66,9 @@ export function useNotes() {
       // 回收站：加载并清理 30 天前的条目
       const trashed = await getStorage().listTrash()
       if (cancelled) return
-      const { fresh, expired } = partitionTrash(trashed)
+      const { kept, expired } = partitionTrash(trashed)
       for (const old of expired) void getStorage().deleteTrash(old.id)
-      applyTrash(fresh)
+      applyTrash(kept)
       setLoaded(true)
     })()
     return () => {
@@ -222,7 +222,7 @@ export function useNotes() {
         applyNotes(fresh)
         const trashed = await getStorage().listTrash()
         // 与全量加载一致：过期回收项一并彻底删除（原先 replace 只过滤不删）
-        const { fresh: kept, expired } = partitionTrash(trashed)
+        const { kept, expired } = partitionTrash(trashed)
         for (const old of expired) void getStorage().deleteTrash(old.id)
         applyTrash(kept)
         return
