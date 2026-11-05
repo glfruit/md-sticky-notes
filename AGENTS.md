@@ -18,7 +18,11 @@ Tauri 2 + React 19 桌面便签：每张便签 = 云盘同步文件夹里的一�
 ## Git 纪律（#13）
 
 - `main` 受 ruleset 保护：只进 PR（必过 CI `frontend`），直推 / force push / 删分支均被拒——实现工作一律在票分支 `<type>/<issue>-<slug>` 上做（如 `fix/12-dup-task`），生命周期详见 `docs/workflow.md`「Git 纪律」节。
-- 并行多票用 worktree：`bash scripts/wt.sh new <分支>`（仓外 sibling 目录，一票一现场），边界/合并/清理纪律见 `docs/workflow.md`「并行：worktree」节。
+- **实现类指令（「实现 xxx」「修 #N」「继续推进候选 xxx」）的自动启动序列（#17），逐步执行不要跳步**：
+  1. **定票**：指令未指向已有 issue 时，先 `gh issue create` 立票打 `ready-for-agent`（架构候选/TODO 项同此），纪律「无 ready-for-agent 不进实现」不变；
+  2. **开现场**：`bash scripts/wt.sh new <type>/<issue>-<slug>`，然后 `cd ../md-sticky-notes-wt/<现场名>` 进去干活——**一律开现场，主仓常驻 main**，不要在主仓直接开分支；主仓若停在其他分支，在汇报里提醒一句即可，不要动它；
+  3. **干活**：高频小 commit（只 add 显式路径）→ 验证三连 → 双轴评审对照 diff，细节见 `docs/workflow.md`；
+  4. **收尾**：三连绿后请用户确认 push 分支 + 开 PR；merge 须用户确认；**squash 合并后回主仓 `bash scripts/wt.sh rm <现场>` 清现场**（分支已进 main，`-d` 无损删；不要在现场目录里删自己）。
 - agent 须先获用户确认才可执行：`git push`、`gh pr merge`、`git reset --hard`、`push --force`、`branch -D`、`clean -fd`。
 - commit 只 add 显式路径，禁止 `git add -A` / `git add .`。
 
