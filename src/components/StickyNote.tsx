@@ -11,16 +11,10 @@ import { highlightMatches } from '@/lib/highlight'
 import { handleEnter, handleTab, cleanupMarkdown } from '@/lib/editor'
 import { setTaskAtIndex, archiveCompletedTasks, convertListItemToTask, convertTaskToListItem, extractTasks, taskProgress, TASK_STATUS_META } from '@/lib/taskLines'
 import type { TaskStatus } from '@/lib/taskLines'
-
-/** 读 decorateTasks 的章（data-task-idx / data-list-idx）；无章返回 -1——计数不齐时不响应 */
-const stampIdx = (el: Element | null, key: 'taskIdx' | 'listIdx'): number => {
-  const v = (el as HTMLElement | null)?.dataset[key]
-  if (v === undefined) return -1
-  const idx = Number(v)
-  return Number.isInteger(idx) ? idx : -1
-}
+import { resolvePreviewContextMenu, stampIdx } from '@/lib/contextMenu'
 import { Markdown } from './Markdown'
 import { FormatBar } from './FormatBar'
+import { Menu, MenuItem, MenuDivider } from './Menu'
 
 export interface RevealTarget {
   start: number
@@ -95,25 +89,17 @@ export const StickyNote = memo(function StickyNote({
 
   // 关闭便签（切回预览）：先做一次 Markdown 语法检查与清理，有修复则短暂提示
   const [cleanupToast, setCleanupToast] = useState<string | null>(null)
-  // 右键菜单：任务项 → 状态选择；普通列表项 → 转换为任务
+  // 右键菜单（任务状态 / 列表转任务）：状态属主在便签（操作本便签内容），
+  // 坐标为视口系，渲染 / Escape / 钳制 / 互斥语义全在 Menu 原语
   const [ctxMenu, setCtxMenu] = useState<
     | { x: number; y: number; kind: 'status'; index: number }
     | { x: number; y: number; kind: 'convert'; listIndex: number }
     | null
   >(null)
-
-  // 右键菜单打开时 Esc 关闭（window 级：菜单打开时焦点不在便签上）
-  useEffect(() => {
-    if (!ctxMenu) return
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setCtxMenu(null)
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [ctxMenu])
+  const closeCtxMenu = useCallback(() => setCtxMenu(null), [])
 
   // 便签根节点右键（标题栏/折叠条/编辑区等预览区之外）：请求 App 层便签菜单。
-  // 预览区内部由上方预览监听处理（任务/列表项菜单优先）
+  // 预览区内部由上方预览监听按 resolvePreviewContextMenu 单源路由（任务/列表项菜单优先）
   const onRootContextMenu = (e: React.MouseEvent) => {
     const t = e.target
     if (t instanceof Element && previewRef.current?.contains(t)) return
@@ -253,10 +239,7 @@ export const StickyNote = memo(function StickyNote({
       if (t.closest('.task-status-trigger')) {
         if (Math.hypot(e.clientX - downX, e.clientY - downY) > 6) return
         const idx = taskIndexOf(t)
-        if (idx >= 0) {
-          const rect = el.getBoundingClientRect()
-          setCtxMenu({ x: e.clientX - rect.left, y: e.clientY - rect.top, kind: 'status', index: idx })
-        }
+        if (idx >= 0) setCtxMenu({ x: e.clientX, y: e.clientY, kind: 'status', index: idx })
         return
       }
       // 复选框：点击直接标记完成；已完成再点回待办
@@ -288,27 +271,22 @@ export const StickyNote = memo(function StickyNote({
         e.preventDefault()
       }
     }
+    // 右键路由单源在 lib/contextMenu：盖章任务项 → 状态菜单；盖章列表项 → 转换；
+    // 预览空白 → App 便签菜单；未盖章 li → 不响应（仍吞掉原生菜单）
     const onContext = (e: MouseEvent) => {
       const t = e.target
       if (!(t instanceof Element)) return
-      const li = t.closest('li')
-      if (!li || !el.contains(li)) {
-        // 空白区右键：便签菜单（居中完整显示）
-        e.preventDefault()
+      const routed = resolvePreviewContextMenu(t, el)
+      e.preventDefault()
+      if (routed === null) return
+      if (routed.kind === 'noteMenu') {
         onRequestNoteMenu?.(e.clientX, e.clientY, note.id)
         return
       }
-      e.preventDefault()
-      const rect = el.getBoundingClientRect()
-      const x = e.clientX - rect.left
-      const y = e.clientY - rect.top
-      // 序号读章：data-task-idx（任务项）/ data-list-idx（全部列表项），未盖章不弹菜单
-      if (li.classList.contains('task-item')) {
-        const idx = stampIdx(li, 'taskIdx')
-        if (idx >= 0) setCtxMenu({ x, y, kind: 'status', index: idx })
+      if (routed.kind === 'task') {
+        setCtxMenu({ x: e.clientX, y: e.clientY, kind: 'status', index: routed.index })
       } else {
-        const listIdx = stampIdx(li, 'listIdx')
-        if (listIdx >= 0) setCtxMenu({ x, y, kind: 'convert', listIndex: listIdx })
+        setCtxMenu({ x: e.clientX, y: e.clientY, kind: 'convert', listIndex: routed.listIndex })
       }
     }
     el.addEventListener('dblclick', onDbl, true)
@@ -958,73 +936,54 @@ export const StickyNote = memo(function StickyNote({
               {cleanupToast}
             </div>
           )}
-          {/* 右键菜单：任务状态 / 转换为任务（便签菜单走下方 portal） */}
+          {/* 右键菜单：任务状态 / 转换为任务（Menu 原语，便签菜单由 App 持有） */}
           {ctxMenu && (
-            <>
-              <div
-                className="fixed inset-0 z-30 cursor-default"
-                onPointerDown={(e) => {
-                  e.stopPropagation()
-                  setCtxMenu(null)
-                }}
-                onContextMenu={(e) => {
-                  e.preventDefault()
-                  setCtxMenu(null)
-                }}
-              />
-              <div
-                className="absolute z-40 rounded-lg bg-white/95 backdrop-blur shadow-xl border border-stone-200 p-1"
-                style={{
-                  left: Math.min(ctxMenu.x, note.width - 130),
-                  top: Math.min(ctxMenu.y, note.height - 170),
-                }}
-              >
-                {ctxMenu.kind === 'status' ? (
-                  <>
-                    <div className="px-2.5 py-1 text-[10px] text-black/40">设置状态</div>
-                    {(Object.keys(TASK_STATUS_META) as TaskStatus[]).map((s) => (
-                      <button
-                        key={s}
-                        className="flex w-full items-center gap-2 px-2.5 py-1 rounded hover:bg-black/5 text-left whitespace-nowrap text-[12px] text-black/75"
-                        onClick={() => {
-                          setTaskStatus(ctxMenu.index, s)
-                          setCtxMenu(null)
-                        }}
-                      >
+            <Menu x={ctxMenu.x} y={ctxMenu.y} onClose={closeCtxMenu}>
+              {ctxMenu.kind === 'status' ? (
+                <>
+                  <div className="px-2.5 py-1 text-[10px] text-black/40">设置状态</div>
+                  {(Object.keys(TASK_STATUS_META) as TaskStatus[]).map((s) => (
+                    <MenuItem
+                      key={s}
+                      icon={
                         <span
                           className="w-2 h-2 rounded-full shrink-0"
                           style={{ backgroundColor: TASK_STATUS_META[s].color }}
                         />
-                        {TASK_STATUS_META[s].label}
-                        {s === ctxTaskStatus && <Check size={12} className="ml-auto text-black/45" />}
-                      </button>
-                    ))}
-                    <div className="my-1 border-t border-black/10" />
-                    <button
-                      className="flex w-full items-center gap-2 px-2.5 py-1 rounded hover:bg-black/5 text-left whitespace-nowrap text-[12px] text-black/55"
+                      }
                       onClick={() => {
-                        convertTaskBack(ctxMenu.index)
-                        setCtxMenu(null)
+                        setTaskStatus(ctxMenu.index, s)
+                        closeCtxMenu()
                       }}
                     >
-                      <span className="w-2 h-2 rounded-full shrink-0 border border-black/30" />
-                      转为普通条目
-                    </button>
-                  </>
-                ) : (
-                  <button
-                    className="flex w-full items-center gap-2 px-2.5 py-1.5 rounded hover:bg-black/5 text-left whitespace-nowrap text-[12px] text-black/75"
+                      {TASK_STATUS_META[s].label}
+                      {s === ctxTaskStatus && <Check size={12} className="ml-auto text-black/45" />}
+                    </MenuItem>
+                  ))}
+                  <MenuDivider />
+                  <MenuItem
+                    muted
+                    icon={<span className="w-2 h-2 rounded-full shrink-0 border border-black/30" />}
                     onClick={() => {
-                      convertToTask(ctxMenu.listIndex)
-                      setCtxMenu(null)
+                      convertTaskBack(ctxMenu.index)
+                      closeCtxMenu()
                     }}
                   >
-                    <span className="w-3.5 h-3.5 rounded-sm border border-black/40 shrink-0" />
-                    转换为任务
-                  </button>
-                )}
-              </div>
-            </>
+                    转为普通条目
+                  </MenuItem>
+                </>
+              ) : (
+                <MenuItem
+                  icon={<span className="w-3.5 h-3.5 rounded-sm border border-black/40 shrink-0" />}
+                  onClick={() => {
+                    convertToTask(ctxMenu.listIndex)
+                    closeCtxMenu()
+                  }}
+                >
+                  转换为任务
+                </MenuItem>
+              )}
+            </Menu>
           )}
           {/* 缩放把手 */}
           <div
