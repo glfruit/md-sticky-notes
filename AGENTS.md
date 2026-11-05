@@ -15,6 +15,12 @@ Tauri 2 + React 19 桌面便签：每张便签 = 云盘同步文件夹里的一�
 
 一切开发工作走 `docs/workflow.md` 的六步流水线（triage → grill → 设计 → spec/tickets → implement → review/发布）。代码规范见 `docs/standards.md`。
 
+## Git 纪律（#13）
+
+- `main` 受 ruleset 保护：只进 PR（必过 CI `frontend`），直推 / force push / 删分支均被拒——实现工作一律在票分支 `<type>/<issue>-<slug>` 上做（如 `fix/12-dup-task`），生命周期详见 `docs/workflow.md`「Git 纪律」节。
+- agent 须先获用户确认才可执行：`git push`、`gh pr merge`、`git reset --hard`、`push --force`、`branch -D`、`clean -fd`。
+- commit 只 add 显式路径，禁止 `git add -A` / `git add .`。
+
 ## Agent skills
 
 ### Issue tracker
