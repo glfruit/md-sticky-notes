@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { groupTasks, TASK_GROUP_META } from '../editor'
-import type { TaskStatus } from '../editor'
+import { groupTasks, TASK_GROUP_META } from '../taskGroups'
+import type { TaskStatus } from '../taskLines'
 
 const NOW = new Date('2026-10-23T09:00:00')
 const row = (status: TaskStatus, due: string | null, updatedAt = 1) => ({

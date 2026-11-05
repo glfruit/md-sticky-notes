@@ -8,8 +8,17 @@ import { exportNote } from '@/lib/export'
 import { saveAttachment, attachmentUrl } from '@/lib/attachments'
 import { htmlTableToMarkdown, tsvToMarkdown } from '@/lib/tablePaste'
 import { highlightMatches } from '@/lib/highlight'
-import { handleEnter, handleTab, setTaskAtIndex, cleanupMarkdown, archiveCompletedTasks, convertListItemToTask, convertTaskToListItem, extractTasks, taskProgress, TASK_STATUS_META } from '@/lib/editor'
-import type { TaskStatus } from '@/lib/editor'
+import { handleEnter, handleTab, cleanupMarkdown } from '@/lib/editor'
+import { setTaskAtIndex, archiveCompletedTasks, convertListItemToTask, convertTaskToListItem, extractTasks, taskProgress, TASK_STATUS_META } from '@/lib/taskLines'
+import type { TaskStatus } from '@/lib/taskLines'
+
+/** 读 decorateTasks 的章（data-task-idx / data-list-idx）；无章返回 -1——计数不齐时不响应 */
+const stampIdx = (el: Element | null, key: 'taskIdx' | 'listIdx'): number => {
+  const v = (el as HTMLElement | null)?.dataset[key]
+  if (v === undefined) return -1
+  const idx = Number(v)
+  return Number.isInteger(idx) ? idx : -1
+}
 import { Markdown } from './Markdown'
 import { FormatBar } from './FormatBar'
 
@@ -229,10 +238,11 @@ export const StickyNote = memo(function StickyNote({
       downX = e.clientX
       downY = e.clientY
     }
+    // 任务项序号：读 decorateTasks 盖的 data-task-idx（与源文任务行序对齐；未盖章 → -1 不响应）
     const taskIndexOf = (node: Element | null): number => {
       const li = node?.closest('li.task-item') as HTMLLIElement | null
       if (!li || !el.contains(li)) return -1
-      return Array.from(el.querySelectorAll('li.task-item')).indexOf(li)
+      return stampIdx(li, 'taskIdx')
     }
     const onUp = (e: PointerEvent) => {
       if (e.button !== 0) return
@@ -255,9 +265,9 @@ export const StickyNote = memo(function StickyNote({
         if (now - lastToggle < 300) return
         if (Math.hypot(e.clientX - downX, e.clientY - downY) > 6) return
         lastToggle = now
+        const li = t.closest('li.task-item') as HTMLLIElement | null
         const idx = taskIndexOf(t)
-        if (idx < 0) return
-        const li = el.querySelectorAll('li.task-item')[idx] as HTMLLIElement
+        if (!li || idx < 0) return
         const status: TaskStatus = li.dataset.status === 'done' ? 'todo' : 'done'
         const next = setTaskAtIndex(note.content, idx, status)
         if (next !== null) onUpdate(note.id, { content: next })
@@ -292,13 +302,12 @@ export const StickyNote = memo(function StickyNote({
       const rect = el.getBoundingClientRect()
       const x = e.clientX - rect.left
       const y = e.clientY - rect.top
+      // 序号读章：data-task-idx（任务项）/ data-list-idx（全部列表项），未盖章不弹菜单
       if (li.classList.contains('task-item')) {
-        const items = Array.from(el.querySelectorAll('li.task-item'))
-        const idx = items.indexOf(li as HTMLLIElement)
+        const idx = stampIdx(li, 'taskIdx')
         if (idx >= 0) setCtxMenu({ x, y, kind: 'status', index: idx })
       } else {
-        const all = Array.from(el.querySelectorAll('li'))
-        const listIdx = all.indexOf(li as HTMLLIElement)
+        const listIdx = stampIdx(li, 'listIdx')
         if (listIdx >= 0) setCtxMenu({ x, y, kind: 'convert', listIndex: listIdx })
       }
     }

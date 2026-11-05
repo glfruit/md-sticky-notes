@@ -1,4 +1,4 @@
-import { TASK_STATUS_META, type TaskStatus } from './editor'
+import { listLineCounts, TASK_STATUS_META, type TaskStatus } from './taskLines'
 
 /** 文本形式的状态标记 → 状态（[/] 进行中、[?] 等待、[-] 废弃） */
 const TEXT_MARKERS: Record<string, TaskStatus> = {
@@ -35,7 +35,7 @@ const TRIGGER_SVG =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>'
 
 /**
- * 给任务项追加悬浮显示的状态切换箭头：
+ * 悬浮显示的状态切换箭头（▾）：
  * 紧凑列表放在 li 直下、松散列表放在 li > p 末尾（保证和文字同行），嵌套子列表之前。
  */
 function appendStatusTrigger(li: HTMLLIElement) {
@@ -51,20 +51,30 @@ function appendStatusTrigger(li: HTMLLIElement) {
 }
 
 /**
- * 装饰渲染后的 HTML：把任务列表项统一标记为 li.task-item + data-status。
+ * 装饰渲染后的 HTML（需传入便签源文 content 做对齐校验）：
  * - [ ] / [x] 由 marked 生成原生 checkbox，直接标记状态
  * - [/] / [?] / [-] marked 不认识，把行首文本标记替换成状态徽章
  * 同时给每个任务项追加悬浮显示的 ▾ 箭头（点击展开状态菜单）。
  * 兼容紧凑列表（li 直下）和松散列表（li > p 包裹）。
+ *
+ * 盖章契约（与 taskLines.scanListLines 对齐）：
+ * - DOM 任务 li 数 === 源文任务行数 → 每个 li 盖 data-task-idx（= 源文任务序）
+ * - DOM li 总数 === 源文列表项数 → 每个 li 盖 data-list-idx（= 源文列表项序）
+ * 计数不齐说明渲染与扫描脱节（如有序任务行、引用内任务行）：不盖章并 warn，
+ * 交互端读到无章即不响应——宁点不动，不改错行。
  */
-export function decorateTasks(html: string): string {
+export function decorateTasks(html: string, content: string): string {
   const doc = new DOMParser().parseFromString(html, 'text/html')
+  const taskLis: HTMLLIElement[] = []
+  const allLis: HTMLLIElement[] = []
   doc.querySelectorAll('li').forEach((li) => {
+    allLis.push(li)
     const checkbox = ownCheckbox(li)
     if (checkbox) {
       li.classList.add('task-item')
       li.dataset.status = checkbox.hasAttribute('checked') ? 'done' : 'todo'
       appendStatusTrigger(li)
+      taskLis.push(li)
       return
     }
     const textNode = firstOwnTextNode(li)
@@ -83,6 +93,19 @@ export function decorateTasks(html: string): string {
     li.classList.add('task-item')
     li.dataset.status = status
     appendStatusTrigger(li)
+    taskLis.push(li)
   })
+
+  const counts = listLineCounts(content)
+  if (taskLis.length === counts.tasks) {
+    taskLis.forEach((li, i) => (li.dataset.taskIdx = String(i)))
+  } else {
+    console.warn(`[decorateTasks] 任务行未盖章：DOM ${taskLis.length} 项 ≠ 源文 ${counts.tasks} 条`)
+  }
+  if (allLis.length === counts.listItems) {
+    allLis.forEach((li, i) => (li.dataset.listIdx = String(i)))
+  } else {
+    console.warn(`[decorateTasks] 列表项未盖章：DOM ${allLis.length} 项 ≠ 源文 ${counts.listItems} 条`)
+  }
   return doc.body.innerHTML
 }

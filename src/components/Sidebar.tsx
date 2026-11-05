@@ -4,7 +4,8 @@ import type { StickyNoteData } from '@/types/note'
 import { NOTE_COLORS } from '@/types/note'
 import { deriveTitle, extractTags } from '@/lib/note'
 import { formatUpdatedAt } from '@/lib/datetime'
-import { extractTasks, TASK_STATUS_META, dueUrgency, DUE_LEVEL_COLORS, groupTasks, TASK_GROUP_META } from '@/lib/editor'
+import { extractTasks, TASK_STATUS_META, dueUrgency, DUE_LEVEL_COLORS } from '@/lib/taskLines'
+import { groupTasks, TASK_GROUP_META } from '@/lib/taskGroups'
 
 interface Props {
   notes: StickyNoteData[]

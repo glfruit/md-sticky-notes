@@ -13,7 +13,7 @@ import { UpdateBanner } from '@/components/UpdateBanner'
 import { useReminders } from '@/hooks/useReminders'
 import { isTauri } from '@/lib/storage'
 import { exportAllNotes } from '@/lib/export'
-import { extractTasks, dueUrgency } from '@/lib/editor'
+import { extractTasks, dueUrgency } from '@/lib/taskLines'
 import { tidyLayout } from '@/lib/layout'
 import './App.css'
 

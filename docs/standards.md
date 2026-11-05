@@ -11,7 +11,7 @@
 
 ## 任务与 Markdown（易错区，历史 bug 最多）
 
-- **任务索引三条线必须对齐**：预览 DOM 顺序（`li.task-item`）、`extractTasks`（侧栏）、`setTaskAtIndex`/`cycleTaskAtIndex`/`toggleTaskAtIndex`（写回源码）——全部跳过围栏代码块计数。改任何一个计数器必须三处同步并加回归测试。
+- **任务行序的单一属主是 `taskLines.scanListLines`**：源文半边（`extractTasks` / `setTaskAtIndex` / `cycleTaskAtIndex` / convert×2 / 归档）全部消费同一份行集扫描；DOM 半边（`decorateTasks`）按行集计数盖章 `data-task-idx` / `data-list-idx`，计数不齐不盖章 + warn（宁点不动，不改错行）。改任务行识别规则（围栏跳过、状态字符集）只改 `taskLines.ts` 一处；契约回归在 `markdownRender.test.ts`（jsdom 全链渲染）。
 - **任务五态色与截止日期色只从 `TASK_STATUS_META` / `DUE_LEVEL_COLORS` 取**，组件里不写裸 hex。
 - 预览交互事件目标判断用 `instanceof Element`（不是 `HTMLElement`——内联 svg 不是 HTMLElement，▾ 按钮点击失效的教训）；svg 内部加 `pointer-events: none` 让点击落在宿主元素。
 - 重复任务（🔁）标记完成时走 `resetRecurringTaskLine` 重置，所有写状态的入口都要过这一步。

@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import type { StickyNoteData } from '@/types/note'
 import { isTauri } from '@/lib/storage'
-import { extractTasks, extractTaskTime } from '@/lib/editor'
+import { extractTasks, extractTaskTime } from '@/lib/taskLines'
 
 const NOTIFIED_KEY = 'md-sticky-notes:notified'
 /** 到点前后的触发窗口 */
