@@ -4,94 +4,22 @@ import { COLOR_ORDER } from '@/types/note'
 import { initStorage, getStorage, isTauri, setFolder } from '@/lib/storage'
 import { clearAttachmentCache, cleanOrphanAttachments } from '@/lib/attachments'
 import { findSpawnSpot, pinnedRects } from '@/lib/layout'
+import {
+  mergeNotes,
+  partitionTrash,
+  nextZTop,
+  normalizeZ,
+  patchNote,
+  seedNotes,
+  Z_NORMALIZE_THRESHOLD,
+} from '@/lib/notesSync'
+
+/** 保存管线的时序布线层：防抖落盘 / flush / 文件夹监听 / 生命周期。
+ *  合并仲裁、回收站 TTL、z 序治理、补丁政策、种子内容等纯决策在 lib/notesSync（可直测）。 */
 
 const SEED_KEY = 'md-sticky-notes:seeded'
-/** 回收站保留 30 天 */
-const TRASH_TTL_MS = 30 * 24 * 60 * 60 * 1000
-/** z 超过该值后按现有层级整体归一化，防止长期使用后无限增长盖过应用级浮层 */
-const Z_NORMALIZE_THRESHOLD = 4000
 /** 新建便签的初始尺寸（出生定位与建卡共用） */
 const NEW_NOTE_SIZE = { width: 300, height: 320 }
-
-const WELCOME_CONTENT = `# 欢迎使用 MD 便签 📝
-
-这是 Mac 便签的 Markdown 增强版。
-
-## 快捷插入日期时间
-- **⌥D** 插入日期 → 2026-10-20
-- **⌥T** 插入时间 → 15:03
-- **⌥⇧T** 插入日期+时间
-- 也可以点标题栏上的 📅 🕐 按钮
-
-## Markdown 支持
-**加粗**、*斜体*、\`代码\`、~~删除线~~
-
-- [x] 任务列表
-- [ ] 待办事项
-
-> 引用块也支持
-
-\`\`\`js
-// 代码高亮块
-console.log('hello')
-\`\`\`
-
-## 其他技巧
-- **⌘E** 切换 编辑 / 预览
-- **⌥N** 新建便签
-- **⌘F** 全局搜索，回车跳转并选中匹配
-- **⌥B** 固定左侧导航栏；鼠标移到屏幕左边缘自动滑出
-- 编辑模式底部工具条：**A 颜色** 给选中文字变色；**表情** 插入 emoji 😄；**表格** 拖选行列插入表格
-- 直接**粘贴截图 / 拖入图片**会自动保存并显示；从 Excel 或网页**复制的表格**粘贴后自动转成 Markdown 表格
-- **任务状态**：悬浮到任务项上点 **▾** 展开状态菜单（待办 / 进行中 / 等待 / 完成 / 废弃），或右键任务精确设置（对应标记 - [ ] 、- [/] 、- [?] 、- [x] 、- [-] ）；点任务前的复选框直接勾选完成
-- 侧栏「任务」页签汇总所有未完成任务；任务文本里写了日期（如 2026-10-25）会按日期排序，今天和逾期的标红
-- 便签里写 **＃标签**（如 ＃工作 ＃学习 这样的井号标签），侧栏「便签」页签顶部可按标签筛选
-- 标题栏 📌 可**置顶显示**；菜单栏「整理」一键排列所有便签、消除重叠
-- 便签可以**拖出窗口边缘**，桌面会出现滚动条，随时滚回来
-- 删除便签：标题栏红点（点两次确认），或左侧导航栏悬停便签点 🗑
-- 双击标题栏折叠；拖动右下角调整大小
-- 内容自动保存`
-
-const TODO_CONTENT = `# 今日待办
-
-- [ ] 回复邮件
-- [ ] 15:00 产品评审
-- [ ] 写周报
-
----
-创建于 2026-10-20 09:30`
-
-function seedNotes(): StickyNoteData[] {
-  const now = Date.now()
-  return [
-    {
-      id: 'seed-welcome',
-      content: WELCOME_CONTENT,
-      color: 'yellow',
-      x: 60,
-      y: 42,
-      width: 360,
-      height: 460,
-      collapsed: false,
-      preview: true,
-      z: 1,
-      updatedAt: now,
-    },
-    {
-      id: 'seed-todo',
-      content: TODO_CONTENT,
-      color: 'green',
-      x: 460,
-      y: 92,
-      width: 280,
-      height: 300,
-      collapsed: false,
-      preview: true,
-      z: 2,
-      updatedAt: now,
-    },
-  ]
-}
 
 let idCounter = 0
 const genId = () => `note-${Date.now().toString(36)}-${(idCounter++).toString(36)}`
@@ -133,16 +61,13 @@ export function useNotes() {
         localStorage.setItem(SEED_KEY, '1')
         for (const n of ns) void getStorage().saveNote(n)
       }
-      zTop.current = ns.reduce((m, n) => Math.max(m, n.z), 0) + 1
+      zTop.current = nextZTop(ns)
       applyNotes(ns)
       // 回收站：加载并清理 30 天前的条目
       const trashed = await getStorage().listTrash()
       if (cancelled) return
-      const cutoff = Date.now() - TRASH_TTL_MS
-      const fresh = trashed.filter((n) => n.updatedAt >= cutoff)
-      for (const old of trashed.filter((n) => n.updatedAt < cutoff)) {
-        void getStorage().deleteTrash(old.id)
-      }
+      const { fresh, expired } = partitionTrash(trashed)
+      for (const old of expired) void getStorage().deleteTrash(old.id)
       applyTrash(fresh)
       setLoaded(true)
     })()
@@ -209,11 +134,7 @@ export function useNotes() {
       const cur = notesRef.current
       const idx = cur.findIndex((n) => n.id === id)
       if (idx === -1) return
-      const changed: StickyNoteData = {
-        ...cur[idx],
-        ...patch,
-        updatedAt: patch.content !== undefined ? Date.now() : cur[idx].updatedAt,
-      }
+      const changed = patchNote(cur[idx], patch)
       const next = [...cur]
       next[idx] = changed
       applyNotes(next)
@@ -271,24 +192,17 @@ export function useNotes() {
       const idx = cur.findIndex((n) => n.id === id)
       if (idx === -1) return
       if (cur[idx].z === zTop.current - 1) return // 已在最上层，避免重复写盘
-      let next: StickyNoteData[]
       if (zTop.current >= Z_NORMALIZE_THRESHOLD) {
         // z 过大：按现有层级归一化为 1..n，目标便签置顶
-        const seq = [...cur].sort((a, b) => a.z - b.z).filter((n) => n.id !== id)
-        seq.push(cur[idx])
-        const rank = new Map(seq.map((n, i) => [n.id, i + 1]))
-        next = cur.map((n) => {
-          const z = rank.get(n.id)!
-          return n.z === z ? n : { ...n, z }
-        })
-        zTop.current = seq.length + 1
-        applyNotes(next)
-        for (let i = 0; i < next.length; i++) {
-          if (next[i].z !== cur[i].z) scheduleSave(next[i])
+        const { notes: normalized, nextTop } = normalizeZ(cur, id)
+        zTop.current = nextTop
+        applyNotes(normalized)
+        for (let i = 0; i < normalized.length; i++) {
+          if (normalized[i].z !== cur[i].z) scheduleSave(normalized[i])
         }
         return
       }
-      next = [...cur]
+      const next = [...cur]
       next[idx] = { ...cur[idx], z: zTop.current++ }
       applyNotes(next)
       scheduleSave(next[idx])
@@ -304,30 +218,20 @@ export function useNotes() {
       if (replace) await flushPendingSaves()
       const fresh = (await getStorage().loadNotes()).map(clampIntoScrollArea)
       if (replace) {
-        zTop.current = fresh.reduce((m, n) => Math.max(m, n.z), 0) + 1
+        zTop.current = nextZTop(fresh)
         applyNotes(fresh)
         const trashed = await getStorage().listTrash()
-        const cutoff = Date.now() - TRASH_TTL_MS
-        applyTrash(trashed.filter((n) => n.updatedAt >= cutoff))
+        // 与全量加载一致：过期回收项一并彻底删除（原先 replace 只过滤不删）
+        const { fresh: kept, expired } = partitionTrash(trashed)
+        for (const old of expired) void getStorage().deleteTrash(old.id)
+        applyTrash(kept)
         return
       }
       const cur = notesRef.current
-      const editing = new Set(cur.filter((n) => !n.preview).map((n) => n.id))
-      const freshIds = new Set(fresh.map((n) => n.id))
-      // 正在编辑的便签以本地为准；其余便签本地不旧于磁盘时也以本地为准——
-      // 自己的写入会触发 folder-changed 重载，而落盘有 600ms 防抖，
-      // 重载落在防抖窗口内时磁盘还是旧版本，无条件采用会把刚改的状态回滚（状态反复）
-      const merged = fresh.map((n) => {
-        const c = cur.find((c) => c.id === n.id)
-        return c && (editing.has(n.id) || c.updatedAt >= n.updatedAt) ? c : n
-      })
-      for (const c of cur) if (!freshIds.has(c.id)) merged.push(c)
-      zTop.current = Math.max(
-        zTop.current,
-        merged.reduce((m, n) => Math.max(m, n.z), 0) + 1,
-      )
-      // 自己的写入也会触发监听事件：内容没变就不重渲染
-      if (JSON.stringify(merged) !== JSON.stringify(cur)) applyNotes(merged)
+      const merged = mergeNotes(cur, fresh)
+      zTop.current = Math.max(zTop.current, nextZTop(merged))
+      // mergeNotes 无变化返回 cur 原引用：引用相等就不重渲染（自己的写入也会触发监听事件）
+      if (merged !== cur) applyNotes(merged)
     },
     [applyNotes, applyTrash, flushPendingSaves],
   )
