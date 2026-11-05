@@ -12,6 +12,20 @@
 发布 ◀── ⑥ runbook ◀── ⑤ 验证阶梯 + code-review ◀── ④ to-spec → to-tickets → implement(+tdd)
 ```
 
+## Git 纪律：票分支 → PR → squash（#13，2026-11-05 起）
+
+`main` 受 ruleset 保护（只进 PR、必过 CI、禁直推/force push/删分支）。每张票的 git 生命周期横跨 ④⑤ 两步：
+
+1. **开分支**：④ implement 开始时从最新 `main` 拉 `<type>/<issue>-<slug>`（`fix/12-dup-task`、`refactor/14-menu-owner`）；一票一分支，寿命以「一张票」为限，不跨票攒活。
+2. **高频小 commit**：agent 每完成一个可验证的小步就 commit（WIP 也 commit——commit 是 agent 的 checkpoint，出错 revert 一步即回）；只 add 显式路径，**禁止 `git add -A` / `git add .`**（防扫进无关改动）。评审发现的修正 squash 进对应 commit，不追加「修正」commit。
+3. **⑤ 验证阶梯在分支上走**：本地静态+单测 → `git push -u origin HEAD && gh pr create`（push 须用户确认）→ CI 在 PR 上跑同一套命令 → 双轴评审**对照 PR diff 做**（AI 写的代码没有人类读过，PR diff 是唯一强制的人类阅读点）→ 视觉冒烟/本地部署在分支本地照旧。
+4. **squash merge**（用户确认后）：一票一提交、线性历史，详尽中文 message 风格不变；merge 后自动删分支。tag 推送不受 ruleset 影响，⑥ runbook 流程不变，「main 干净已推送 CI 绿」的前置检查从此自动成立。
+5. **回滚**：出问题 `git revert <squash hash>` 整票撤销，bisect 粒度 = 票。
+
+> 教训：#8–#11 共 8 个提交攒在本地 `main` 未推，CI（push: main）从未覆盖过它们——验证门没有机制兜底就只是自律。ruleset 生效后 main 只进 PR，CI 门自动成立（已实证直推被拒）。
+> 依据（2026-11 三路调研）：五家 AI 编码工具厂商全部默认 agent 不直接落 main；DORA 2025 证明 AI 默认推大批次、稀释审查、伤稳定性，处方是小批次+快速反馈；社区共识是「机制化门禁（ruleset/CI）而非提示词」——agent 每个新 session 不记得约定，prompt 挡不住幻觉破坏性命令。
+> Solo 场景 PR 不是审批门（ruleset 不开 required approvals，自批自合被 GitHub 禁止），它是「强制读 diff + CI 门 + 整票回滚单元」三合一。
+
 ## ① 想法进入：`/triage`
 
 任何工作项（用户 Issue、自己的想法、TODO.md 暂缓项）先进 triage 状态机，归入五个标签之一：

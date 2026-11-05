@@ -36,12 +36,14 @@
 
 ## 提交与发布
 
+- **一票一分支一 PR（#13）**：实现工作在 `<type>/<issue>-<slug>` 短命分支上做，`main` 只进 squash merge 的 PR（ruleset 强制：必过 CI `frontend`、禁直推/force push/删分支）；分支上高频小 commit、只 add 显式路径，禁 `git add -A`；评审修正 squash 进对应 commit，不追加「修正」commit。生命周期详见 `docs/workflow.md`「Git 纪律」节。
 - 提交信息：中文、动词开头、括号里给动机/根因（看 git log 现有风格）；一个提交一个主题。
-- 发布走 `docs/release-runbook.md`：tag → CI → 校验 7 资产 + latest.json → 填说明 → publish；draft 重打 tag 仅限从未 publish。
+- 发布走 `docs/release-runbook.md`：tag → CI → 校验 7 资产 + latest.json → 填说明 → publish；draft 重打 tag 仅限从未 publish（tag 推送不受 ruleset 影响）。
 - 本地部署：`bash scripts/build-desktop.sh` 后 `ditto` 替换 `/Applications/MD Sticky Notes.app`（先 rm 旧的，替换前确认进程未运行或提醒重启）。
 
 ## Shell 坑（本机实证）
 
 - zsh 通配符无匹配会让整条命令中止（`ls a* b*` 一个不匹配全炸），分开跑或 `2>/dev/null`；
+- zsh 下 `HEAD^` 的 `^` 会被当通配符展开报 no matches found，写 `HEAD~1` 或加引号 `'HEAD^'`；
 - 管道接 `tail` 会掩盖上游退出码，验证链路要看每段输出；
 - 中文脚本 `set -u` 下 `$VAR` 后紧跟全角标点会被当成更长变量名，写 `${VAR}`。
