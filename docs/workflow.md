@@ -26,16 +26,17 @@
 > 依据（2026-11 三路调研）：五家 AI 编码工具厂商全部默认 agent 不直接落 main；DORA 2025 证明 AI 默认推大批次、稀释审查、伤稳定性，处方是小批次+快速反馈；社区共识是「机制化门禁（ruleset/CI）而非提示词」——agent 每个新 session 不记得约定，prompt 挡不住幻觉破坏性命令。
 > Solo 场景 PR 不是审批门（ruleset 不开 required approvals，自批自合被 GitHub 禁止），它是「强制读 diff + CI 门 + 整票回滚单元」三合一。
 
-### 并行：worktree，一票一现场（#15）
+### 并行：worktree，一票一现场（#15，#17 起 agent 自动开）
 
-同时推进多张票（典型：功能票 × improve-codebase-architecture 重构票）时，每票一个 worktree。`bash scripts/wt.sh new <分支>` 一键建现场（仓外 sibling 目录 `../md-sticky-notes-wt/` + 独立 `node_modules`，npm ci 自动跑），并行会话各自在现场目录里起，互不踩工作区。
+实现类指令（「实现 xxx」「修 #N」「继续推进候选 xxx」）由 agent 自动走启动序列：**立票（缺则补 `ready-for-agent`）→ `bash scripts/wt.sh new <分支>` 开现场 → `cd` 进去干活 → 三连绿后请用户确认 push + PR → squash 合并后回主仓 `wt.sh rm` 清现场**。主仓常驻 `main` 只作收尾/合并用；多张票并行 = 多个现场（典型：功能票 × improve-codebase-architecture 重构票），会话各自在现场目录里起，互不踩工作区。
 
 - **并行边界**：两张票触碰同一模块不并行（triage/grill 时用 blocked_by 边声明）；动 Rust 的票避免并行（cargo `target/` 4.7G/份，确需并行 `export CARGO_TARGET_DIR` 共享主仓 target，cargo 目录锁自动排队）。
 - **合并纪律**：一次只 squash 合一个 PR；合后其余现场 `git rebase main` + 重跑三连再走 PR；冲突大就 `wt.sh rm` 弃现场重开（已完成的小 commit 可 cherry-pick 捞回）。
 - **环境**：`.env` 不进 git，现场里跑 `build-desktop.sh` 前先从主仓 cp；dev/preview 端口自动递增（3000→3001…）、localStorage 按端口隔离——演示数据天然不互踩，是 feature 不是 bug。
-- **清理**：`bash scripts/wt.sh rm <现场>`；未合并分支会保留并提示（`branch -d` 语义=内容可达才删，无信息丢失），确认丢弃手动 `-D`（须用户确认）。
+- **清理**：`bash scripts/wt.sh rm <现场>`；未合并分支会保留并提示（`branch -d` 语义=内容可达才删，无信息丢失），确认丢弃手动 `-D`（须用户确认）；**在现场里收尾时先 `cd` 回主仓再 rm**（git 拒绝删除当前所在的 worktree）。
 
 > 依据（2026-11 调研）：Claude Code（`claude -w`）与 Codex 桌面（managed worktree）均把 worktree 做成一等公民并行方案；社区坑=环境复制成本（node_modules/端口/共享数据库），本项目无共享后端、DB 漂移坑不存在，其余两个均有对策（脚本封 npm ci、端口自动递增）。
+> #17 两个决策点未获用户作答，按推荐/保守默认执行供否决：落点=总是开现场（贴合「说一声自动开」意图、规则无判断分支）；push 分支前仍请确认（#13 已拍板纪律不单方面松动）。
 
 ## ① 想法进入：`/triage`
 
