@@ -26,6 +26,17 @@
 > 依据（2026-11 三路调研）：五家 AI 编码工具厂商全部默认 agent 不直接落 main；DORA 2025 证明 AI 默认推大批次、稀释审查、伤稳定性，处方是小批次+快速反馈；社区共识是「机制化门禁（ruleset/CI）而非提示词」——agent 每个新 session 不记得约定，prompt 挡不住幻觉破坏性命令。
 > Solo 场景 PR 不是审批门（ruleset 不开 required approvals，自批自合被 GitHub 禁止），它是「强制读 diff + CI 门 + 整票回滚单元」三合一。
 
+### 并行：worktree，一票一现场（#15）
+
+同时推进多张票（典型：功能票 × improve-codebase-architecture 重构票）时，每票一个 worktree。`bash scripts/wt.sh new <分支>` 一键建现场（仓外 sibling 目录 `../md-sticky-notes-wt/` + 独立 `node_modules`，npm ci 自动跑），并行会话各自在现场目录里起，互不踩工作区。
+
+- **并行边界**：两张票触碰同一模块不并行（triage/grill 时用 blocked_by 边声明）；动 Rust 的票避免并行（cargo `target/` 4.7G/份，确需并行 `export CARGO_TARGET_DIR` 共享主仓 target，cargo 目录锁自动排队）。
+- **合并纪律**：一次只 squash 合一个 PR；合后其余现场 `git rebase main` + 重跑三连再走 PR；冲突大就 `wt.sh rm` 弃现场重开（已完成的小 commit 可 cherry-pick 捞回）。
+- **环境**：`.env` 不进 git，现场里跑 `build-desktop.sh` 前先从主仓 cp；dev/preview 端口自动递增（3000→3001…）、localStorage 按端口隔离——演示数据天然不互踩，是 feature 不是 bug。
+- **清理**：`bash scripts/wt.sh rm <现场>`；未合并分支会保留并提示（`branch -d` 语义=内容可达才删，无信息丢失），确认丢弃手动 `-D`（须用户确认）。
+
+> 依据（2026-11 调研）：Claude Code（`claude -w`）与 Codex 桌面（managed worktree）均把 worktree 做成一等公民并行方案；社区坑=环境复制成本（node_modules/端口/共享数据库），本项目无共享后端、DB 漂移坑不存在，其余两个均有对策（脚本封 npm ci、端口自动递增）。
+
 ## ① 想法进入：`/triage`
 
 任何工作项（用户 Issue、自己的想法、TODO.md 暂缓项）先进 triage 状态机，归入五个标签之一：
