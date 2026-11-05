@@ -170,10 +170,11 @@ function intersects(a: Rect, b: Rect): boolean {
   return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y
 }
 
-/** 新便签出生定位（#8）：置顶层恒高于普通层，出生撞上置顶便签会被盖死无法拖动，
- *  故沿级联偏移序列顺延，取第一个与全部占位矩形（置顶便签的展开矩形/折叠条带）
- *  不相交、且完整落在视口内（扣除菜单栏高）的位置。
- *  无需避让（无占位矩形）或扫满序列仍无空位时，回退序列首项（现状行为）。 */
+/** 新便签出生定位（#8/#10）：置顶层恒高于普通层，出生撞上置顶便签会被盖死无法拖动。
+ *  三层策略：① 无占位（无置顶便签）→ 级联首项（现状行为）；② 级联偏移带内顺延，
+ *  取首个与全部占位矩形（置顶便签展开矩形/折叠条带）不相交且完整在视口内（扣除
+ *  菜单栏高）的位置；③ 带被置顶盖满 → 全可见视口 36px 网格找空位，整屏盖满才回退
+ *  级联首项。 */
 export function findSpawnSpot(opts: {
   /** 需避让的占位矩形集合 */
   occupied: Rect[]
@@ -190,12 +191,21 @@ export function findSpawnSpot(opts: {
   // 候选带恒出正坐标，x/y ≥ 0 检查为契约完整性兜底（防带常量调小后漏判）
   const contained = (r: Rect) =>
     r.x >= 0 && r.y >= 0 && r.x + r.width <= opts.viewport.width && r.y + r.height <= maxBottom
+  const hitsOccupied = (r: Rect) => opts.occupied.some((o) => intersects(r, o))
   for (let k = opts.start; k < opts.start + SPAWN_SCAN_LIMIT; k++) {
     const p = cascadePos(k)
     const rect: Rect = { x: p.x, y: p.y, width: opts.size.width, height: opts.size.height }
-    if (!contained(rect)) continue
-    if (opts.occupied.some((o) => intersects(rect, o))) continue
+    if (!contained(rect) || hitsOccupied(rect)) continue
     return p
+  }
+  // 带扫满升级（#10）：置顶便签稍大即可盖满候选带，回退等于必然重叠——
+  // 改为全可见视口 36px（SPAWN_STEP）网格自上而下、行内自左向右找首个空位
+  // （容纳性由循环边界保证）；整屏被置顶盖满才回退级联首项
+  for (let y = TOP; y + opts.size.height <= maxBottom; y += SPAWN_STEP) {
+    for (let x = MARGIN; x + opts.size.width <= opts.viewport.width; x += SPAWN_STEP) {
+      const rect: Rect = { x, y, width: opts.size.width, height: opts.size.height }
+      if (!hitsOccupied(rect)) return { x, y }
+    }
   }
   return preferred
 }
