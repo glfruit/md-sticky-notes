@@ -15,6 +15,30 @@ fn path_exists(path: String) -> bool {
     Path::new(&path).exists()
 }
 
+// ---------- 磁盘布局契约（单源；前端 lib/storage/folderAdapter 拼同名概念，勿在两侧散改） ----------
+
+/// 回收站子目录名（前端 folderAdapter 同名字符串）
+const TRASH_DIR: &str = ".trash";
+/// 附件子目录名
+const ATTACHMENTS_DIR: &str = "attachments";
+
+/// 用户输入的便签 id / 附件名 → 安全文件名：路径分隔符换成下划线（防穿越）。
+/// 全部 IPC 命令共用，改规则只改这里。
+fn sanitize_name(s: &str) -> String {
+    s.replace(['/', '\\'], "_")
+}
+
+/// 便签 id → 同步文件夹下的文件路径 `<folder>/<safe-id>.md`。
+/// list_notes 的反向提取（extension == "md" + file_stem）依赖同一契约。
+fn note_path(folder: &str, id: &str) -> std::path::PathBuf {
+    Path::new(folder).join(format!("{}.md", sanitize_name(id)))
+}
+
+/// 附件目录 `<folder>/attachments`
+fn attachments_dir(folder: &str) -> std::path::PathBuf {
+    Path::new(folder).join(ATTACHMENTS_DIR)
+}
+
 /// 已知「非文件提供方」云盘同步根（相对 HOME）：坚果云客户端自管目录 + 旧版 Dropbox 挂载路径。
 /// macOS 文件提供方服务（Dropbox / OneDrive / Google Drive / Box 等）统一挂在
 /// ~/Library/CloudStorage/ 下，运行时枚举该目录即可，无需逐个硬编码。
@@ -93,12 +117,16 @@ fn copy_folder_contents(from: String, to: String) -> Result<(usize, usize, usize
         return Err("目标文件夹与当前文件夹相同或互为父子目录，无法迁移".to_string());
     }
     let notes = copy_dir_files(src, dst)?;
-    let trash = copy_dir_files(&src.join(".trash"), &dst.join(".trash"))?;
-    let atts = copy_dir_files(&src.join("attachments"), &dst.join("attachments"))?;
+    let trash = copy_dir_files(&src.join(TRASH_DIR), &dst.join(TRASH_DIR))?;
+    let atts = copy_dir_files(
+        &src.join(ATTACHMENTS_DIR),
+        &dst.join(ATTACHMENTS_DIR),
+    )?;
     Ok((notes, trash, atts))
 }
 
-/// 列出同步文件夹里的所有 .md 便签，返回 (便签 id, 文件全文)
+/// 列出同步文件夹里的所有 .md 便签，返回 (便签 id, 文件全文)。
+/// 文件名契约是 note_path 的反向（<safe-id>.md → stem 即 id）
 #[tauri::command]
 fn list_notes(folder: String) -> Result<Vec<(String, String)>, String> {
     let dir = Path::new(&folder);
@@ -145,14 +173,12 @@ fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), String> {
 #[tauri::command]
 fn write_note(folder: String, id: String, text: String) -> Result<(), String> {
     fs::create_dir_all(&folder).map_err(|e| e.to_string())?;
-    let safe = id.replace(['/', '\\'], "_");
-    atomic_write(&Path::new(&folder).join(format!("{safe}.md")), text.as_bytes())
+    atomic_write(&note_path(&folder, &id), text.as_bytes())
 }
 
 #[tauri::command]
 fn delete_note(folder: String, id: String) -> Result<(), String> {
-    let safe = id.replace(['/', '\\'], "_");
-    let p = Path::new(&folder).join(format!("{safe}.md"));
+    let p = note_path(&folder, &id);
     if p.exists() {
         fs::remove_file(p).map_err(|e| e.to_string())?;
     }
@@ -162,28 +188,26 @@ fn delete_note(folder: String, id: String) -> Result<(), String> {
 #[tauri::command]
 fn write_attachment(folder: String, name: String, data_b64: String) -> Result<(), String> {
     use base64::Engine;
-    let dir = Path::new(&folder).join("attachments");
+    let dir = attachments_dir(&folder);
     fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
-    let safe = name.replace(['/', '\\'], "_");
     let bytes = base64::engine::general_purpose::STANDARD
         .decode(data_b64)
         .map_err(|e| e.to_string())?;
-    atomic_write(&dir.join(safe), &bytes)
+    atomic_write(&dir.join(sanitize_name(&name)), &bytes)
 }
 
 /// 原始二进制返回（IPC raw payload），避免大图片走 JSON 数字数组
 #[tauri::command]
 fn read_attachment(folder: String, name: String) -> Result<Response, String> {
-    let safe = name.replace(['/', '\\'], "_");
     let bytes =
-        fs::read(Path::new(&folder).join("attachments").join(safe)).map_err(|e| e.to_string())?;
+        fs::read(attachments_dir(&folder).join(sanitize_name(&name))).map_err(|e| e.to_string())?;
     Ok(Response::new(bytes))
 }
 
 /// 列出 attachments 目录下的全部附件文件名（孤儿清理用）
 #[tauri::command]
 fn list_attachments(folder: String) -> Result<Vec<String>, String> {
-    let dir = Path::new(&folder).join("attachments");
+    let dir = attachments_dir(&folder);
     if !dir.exists() {
         return Ok(vec![]);
     }
@@ -201,8 +225,7 @@ fn list_attachments(folder: String) -> Result<Vec<String>, String> {
 
 #[tauri::command]
 fn delete_attachment(folder: String, name: String) -> Result<(), String> {
-    let safe = name.replace(['/', '\\'], "_");
-    let p = Path::new(&folder).join("attachments").join(safe);
+    let p = attachments_dir(&folder).join(sanitize_name(&name));
     if p.exists() {
         fs::remove_file(p).map_err(|e| e.to_string())?;
     }
@@ -419,5 +442,23 @@ mod tests {
         assert_eq!(fs::read_to_string(dst.join("a.md")).unwrap(), "old");
         assert_eq!(fs::read_to_string(dst.join("b.md")).unwrap(), "new");
         let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn sanitize_name_replaces_path_separators() {
+        assert_eq!(sanitize_name("a/b\\c"), "a_b_c");
+        assert_eq!(sanitize_name("../evil"), ".._evil");
+        assert_eq!(sanitize_name("note-abc123"), "note-abc123");
+    }
+
+    #[test]
+    fn note_path_stays_inside_folder() {
+        // 分隔符被替换后落在 folder 内，不构成路径穿越
+        assert_eq!(
+            note_path("/tmp/f", "../evil"),
+            Path::new("/tmp/f/.._evil.md")
+        );
+        // id 为 ".." 时拼成字面名 "...md"，同样不越界
+        assert_eq!(note_path("/tmp/f", ".."), Path::new("/tmp/f/...md"));
     }
 }
