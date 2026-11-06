@@ -5,7 +5,7 @@
 ## 架构分层
 
 - **纯逻辑放 `src/lib/`**：可单测的纯函数（editor.ts、noteFile.ts 等），不 import React、不碰 DOM/IPC。组件里的逻辑要么是纯渲染，要么应该下沉到 lib。
-- **组件是薄壳**：`StickyNote` 用 `memo`，重渲染只由自身 props 驱动；拖动/缩放过程直写 DOM，`pointerup` 一次性提交状态（唯一一次 setState + 落盘）。
+- **组件是薄壳**：`StickyNote` 用 `memo`，重渲染只由自身 props 驱动；拖动/缩放过程直写 DOM，`pointerup` 一次性提交状态（唯一一次 setState + 落盘）。 StickyNote 的机制半边按内聚边界拆在 `hooks/useNoteEditor`（插入/粘贴拖入/颜色/键盘/光标与搜索选中）、`hooks/useNoteDrag`（拖动吸附/缩放/最大化）、`hooks/useNotePreview`（双通道进编辑/复选框/▾ 菜单/右键路由/高亮），组件剩内容操作属主（任务包装/cleanupToast）与 JSX；新机制优先进对应 hook 而非回填组件。
 - **状态镜像模式**：`useNotes` 的 `notesRef`/`trashRef` 是 state 的同步镜像，让操作函数在 updater 外读最新值；React updater 必须是纯函数，副作用（落盘、z 归一化）全部外移。
 - **弹出菜单的单一属主是 `components/Menu`**：新菜单一律消费 `Menu`/`MenuItem`（portal 到 body、视口坐标、实测尺寸钳制、Escape / 点外部关闭、全局互斥），不手写 backdrop / Escape / 钳制样板；右键「落点 → 菜单」的路由规则单源在 `lib/contextMenu`（消费 #11 盖章，未盖章不响应）。按钮锚定的向上 popover（FormatBar 弹出）不塞进点定位模型，但 Escape 关闭语义必须具备。
 - **画布几何的单一属主是 `lib/layout`**（#26）：菜单栏高 / 折叠条带高 / 画布扩展边距 / 吸附距离等几何常量与「折叠→矩形映射 `noteRect`」「画布尺寸 `canvasExtent`」「滚动 `revealScroll`/`centerScroll`」「吸附 `snapValue`/`edgeCandidates`」「负坐标裁剪」等纯计算一律 import 自 lib/layout，组件里不写几何魔数副本；出生定位（`findSpawnSpot`）、一屏收纳（`tidyLayout`）、置顶避让（`pinnedRects`）同源。CSS 侧 top-7 / h-7 与 MENU_BAR_H 跨语言手工同步。
