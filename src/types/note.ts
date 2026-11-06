@@ -34,3 +34,12 @@ export const COLOR_ORDER: NoteColor[] = ['yellow', 'blue', 'green', 'pink', 'pur
 
 export const MIN_W = 240
 export const MIN_H = 180
+
+/** 搜索跳转目标：切到编辑模式并选中 [start, end) 区间 */
+export interface RevealTarget {
+  start: number
+  end: number
+  /** 查询词：预览模式下高亮全部匹配（编辑模式仅选中 [start,end)） */
+  query?: string
+  nonce: number
+}
