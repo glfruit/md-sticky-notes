@@ -334,6 +334,8 @@ export function resetRecurringTaskLine(line: string, now = new Date()): string |
   } else {
     newText = text.replace(/🔁/, `${next} 🔁`)
   }
-  const head = m[0].replace(m[2], ' ') // 「[x]」→「[ ]」
+  // 「[x]」→「[ ]」：按捕获组重组行首而非字符串 replace——m[2] 为 '-'（废弃标记）时
+  // replace 命中的是 m[0] 里的首个 '-'（列表符），产出 ` [-]` 破损行首（#12）
+  const head = `${m[1]} ${m[3]}`
   return `${head}${newText}`
 }
