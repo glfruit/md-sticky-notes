@@ -6,10 +6,12 @@ export type Invoke = <T>(cmd: string, args?: Record<string, unknown>) => Promise
 
 /**
  * 文件夹存储（Tauri 桌面版）：
- * - 每张便签一个 <id>.md（frontmatter 存元数据）
+ * - 每张便签一个 <id>.md（frontmatter 存元数据；文件名规则单源在 Rust note_path）
  * - 图片存 attachments/ 子目录，文件名即 attachment id
+ * - 回收站 = .trash/ 子目录（与 Rust TRASH_DIR 同名契约）
  */
 export function makeFolderAdapter(folder: string, invoke: Invoke): StorageAdapter {
+  const trashFolder = () => `${folder}/.trash`
   return {
     kind: 'folder',
     describe: () => folder,
@@ -68,7 +70,7 @@ export function makeFolderAdapter(folder: string, invoke: Invoke): StorageAdapte
     // 回收站 = 同步文件夹下的 .trash 子目录，复用现有命令
     async trashNote(note) {
       await invoke('write_note', {
-        folder: `${folder}/.trash`,
+        folder: trashFolder(),
         id: note.id,
         text: serializeNote(note),
       })
@@ -77,7 +79,7 @@ export function makeFolderAdapter(folder: string, invoke: Invoke): StorageAdapte
 
     async listTrash() {
       try {
-        const files = await invoke<[string, string][]>('list_notes', { folder: `${folder}/.trash` })
+        const files = await invoke<[string, string][]>('list_notes', { folder: trashFolder() })
         const notes: StickyNoteData[] = []
         for (const [id, text] of files) {
           const n = parseNoteFile(id, text)
@@ -91,11 +93,11 @@ export function makeFolderAdapter(folder: string, invoke: Invoke): StorageAdapte
 
     async restoreTrash(note) {
       await invoke('write_note', { folder, id: note.id, text: serializeNote(note) })
-      await invoke('delete_note', { folder: `${folder}/.trash`, id: note.id })
+      await invoke('delete_note', { folder: trashFolder(), id: note.id })
     },
 
-    async deleteTrash(id) {
-      await invoke('delete_note', { folder: `${folder}/.trash`, id })
+    async deleteTrash(id: string) {
+      await invoke('delete_note', { folder: trashFolder(), id })
     },
   }
 }
