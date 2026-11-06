@@ -6,9 +6,13 @@ import type { StorageAdapter, FolderCapable } from './types'
 const FOLDER_KEY = 'md-sticky-notes:folder'
 
 let adapter: StorageAdapter = localAdapter
-let folderCapable: FolderCapable | null = null
 let folderPath: string | null = null
 let tauriInvoke: Invoke | null = null
+
+/** 类型谓词：folder 态的 adapter 即 FolderCapable（唯一来源 makeFolderAdapter，无第二实例源） */
+function isFolderCapable(a: StorageAdapter): a is FolderCapable {
+  return a.kind === 'folder'
+}
 
 export function isTauri(): boolean {
   return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
@@ -20,7 +24,7 @@ export function getStorage(): StorageAdapter {
 
 /** 文件夹管理能力单点收窄（null = 网页版 / 桌面未初始化）：桌面专属操作全在 FolderCapable */
 export function getFolderCapable(): FolderCapable | null {
-  return folderCapable
+  return isFolderCapable(adapter) ? adapter : null
 }
 
 export function getFolder(): string | null {
@@ -30,11 +34,9 @@ export function getFolder(): string | null {
 /** 换装三步序列单源（initStorage / setFolder 共用）：记路径 → 换适配器 → 重挂文件夹监听 */
 function applyFolder(path: string): void {
   const invoke = tauriInvoke!
-  const capable = makeFolderAdapter(path, invoke)
   folderPath = path
   localStorage.setItem(FOLDER_KEY, path)
-  adapter = capable
-  folderCapable = capable
+  adapter = makeFolderAdapter(path, invoke)
   // 文件夹变更监听（另一台机器 / 云盘客户端改动了便签 → 通知前端重载）；
   // 失败静默：无 watcher 只是不自动重载，读写不受影响
   void invoke('watch_folder', { folder: path }).catch(() => {})

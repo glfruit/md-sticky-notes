@@ -38,13 +38,14 @@ export function StorageSettings({ onClose, onSwitchFolder, onFlushPending, onCle
 
   /** 应用切换：flush 旧文件夹 → 托管目录内则自动迁移数据 → 切换并全量重载 */
   const applySwitch = async (path: string, syncRoot: string) => {
-    if (!folder || !capable) return
+    if (!capable) return
     setBusy(true)
     try {
       await onFlushPending()
       let migrated = ''
       if (syncRoot) {
-        const [notes, trash, atts] = await capable.migrateFolderData(folder, path)
+        // 不变量：capable 在位则 folder 在位（applyFolder 同时设置）
+        const [notes, trash, atts] = await capable.migrateFolderData(folder!, path)
         const parts = [
           notes > 0 ? `${notes} 个便签` : '',
           trash > 0 ? `${trash} 个回收站便签` : '',

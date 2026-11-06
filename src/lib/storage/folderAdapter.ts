@@ -21,18 +21,22 @@ const SYNC_ROOT_LABELS: Record<string, string> = {
  */
 export function makeFolderAdapter(folder: string, invoke: Invoke): FolderCapable {
   const trashFolder = () => `${folder}/.trash`
+  /** 列目录并解析为便签（loadNotes / listTrash 共用形状） */
+  const listNotesIn = async (dir: string): Promise<StickyNoteData[]> => {
+    const files = await invoke<[string, string][]>('list_notes', { folder: dir })
+    const notes: StickyNoteData[] = []
+    for (const [id, text] of files) {
+      const n = parseNoteFile(id, text)
+      if (n) notes.push(n)
+    }
+    return notes
+  }
   return {
     kind: 'folder',
     describe: () => folder,
 
     async loadNotes() {
-      const files = await invoke<[string, string][]>('list_notes', { folder })
-      const notes: StickyNoteData[] = []
-      for (const [id, text] of files) {
-        const n = parseNoteFile(id, text)
-        if (n) notes.push(n)
-      }
-      return notes
+      return listNotesIn(folder)
     },
 
     async saveNote(note) {
@@ -76,13 +80,7 @@ export function makeFolderAdapter(folder: string, invoke: Invoke): FolderCapable
 
     async listTrash() {
       try {
-        const files = await invoke<[string, string][]>('list_notes', { folder: trashFolder() })
-        const notes: StickyNoteData[] = []
-        for (const [id, text] of files) {
-          const n = parseNoteFile(id, text)
-          if (n) notes.push(n)
-        }
-        return notes
+        return await listNotesIn(trashFolder())
       } catch {
         return []
       }
@@ -132,14 +130,18 @@ export function makeFolderAdapter(folder: string, invoke: Invoke): FolderCapable
     subscribeChanges(cb: () => void): () => void {
       let unlisten: (() => void) | undefined
       let active = true
-      void import('@tauri-apps/api/event').then(({ listen }) => {
-        if (!active) return
-        void listen('folder-changed', () => cb()).then((fn) => {
-          // 订阅期间已退订：迟到的 listen 结果立即释放
-          if (active) unlisten = fn
-          else fn()
+      void import('@tauri-apps/api/event')
+        .then(({ listen }) => {
+          if (!active) return
+          void listen('folder-changed', () => cb()).then((fn) => {
+            // 订阅期间已退订：迟到的 listen 结果立即释放
+            if (active) unlisten = fn
+            else fn()
+          })
         })
-      })
+        .catch(() => {
+          // 动态 import 失败兜底：订阅不上不致命（无自动重载，读写不受影响），不留 unhandled rejection
+        })
       return () => {
         active = false
         unlisten?.()

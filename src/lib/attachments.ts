@@ -60,18 +60,18 @@ export async function cleanOrphanAttachments(
   notes: StickyNoteData[],
   trash: StickyNoteData[],
 ): Promise<number> {
-  const storage = getFolderCapable()
-  if (!storage) return 0
+  const capable = getFolderCapable()
+  if (!capable) return 0
   const referenced = new Set<string>()
   for (const n of [...notes, ...trash]) {
     for (const m of n.content.matchAll(ATTACHMENT_REF_RE)) referenced.add(m[1])
   }
   let removed = 0
-  const files = await storage.listAttachments()
+  const files = await capable.listAttachments()
   for (const f of files) {
     if (referenced.has(f)) continue
     try {
-      await storage.deleteAttachment(f)
+      await capable.deleteAttachment(f)
       blobUrlCache.delete(f)
       removed++
     } catch {

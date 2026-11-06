@@ -156,11 +156,12 @@ describe('folderAdapter.subscribeChanges', () => {
     await vi.waitFor(() => expect(lateUnlisten).toHaveBeenCalledTimes(1))
     expect(cb).not.toHaveBeenCalled()
 
-    // 场景 B：退订发生在动态 import 链启动前 → listen 不发起
+    // 场景 B：退订发生在动态 import 链启动前 → listen 不发起。
+    // 负向断言无受控信号可用，排空微任务 + 一轮宏任务（0ms）即足以证明
     const never = vi.fn()
     listenMock.mockImplementationOnce(async () => never)
     adapter.subscribeChanges(vi.fn())()
-    await new Promise((r) => setTimeout(r, 10))
+    await new Promise((r) => setTimeout(r, 0))
     expect(never).not.toHaveBeenCalled()
   })
 })
