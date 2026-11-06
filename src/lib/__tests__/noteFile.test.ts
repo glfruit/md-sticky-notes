@@ -62,3 +62,26 @@ describe('noteFile 序列化往返', () => {
     expect(parsed?.content).toBe(content)
   })
 })
+
+describe('category 分类字段（#41）', () => {
+  it('有分类：序列化写入 category 行，round-trip 保留', () => {
+    const note = { ...base, category: '工作' }
+    const text = serializeNote(note)
+    expect(text).toContain('category: 工作')
+    expect(parseNoteFile('n', text)?.category).toBe('工作')
+  })
+
+  it('无分类：不写 category 行，解析为 undefined', () => {
+    const text = serializeNote(base)
+    expect(text).not.toContain('category')
+    expect(parseNoteFile('n', text)?.category).toBeUndefined()
+  })
+
+  it('历史文件无 category 行 / 空白串：解析归一 undefined', () => {
+    const noField = parseNoteFile('n', serializeNote(base).replace('z:', 'z:'))
+    expect(noField?.category).toBeUndefined()
+    const blank = serializeNote(base).replace('z: 1', 'category:   
+z: 1')
+    expect(parseNoteFile('n', blank)?.category).toBeUndefined()
+  })
+})

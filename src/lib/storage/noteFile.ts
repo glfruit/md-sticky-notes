@@ -14,6 +14,7 @@ export function serializeNote(note: StickyNoteData): string {
     `preview: ${note.preview}`,
     `pinned: ${!!note.pinned}`,
     `translucent: ${!!note.translucent}`,
+    ...(note.category ? [`category: ${note.category}`] : []),
     `z: ${note.z}`,
     `updatedAt: ${note.updatedAt}`,
     '---',
@@ -63,6 +64,7 @@ export function parseNoteFile(id: string, text: string): StickyNoteData | null {
     preview: m.preview !== 'false',
     pinned: m.pinned === 'true' || undefined,
     translucent: m.translucent === 'true' || undefined,
+    category: m.category?.trim() || undefined,
     z: num('z', 1),
     updatedAt: num('updatedAt', Date.now()),
   }
