@@ -20,6 +20,7 @@ import {
   canvasExtent,
   revealScroll,
   centerScroll,
+  type NoteGeometry,
 } from '@/lib/layout'
 import './App.css'
 
@@ -87,7 +88,7 @@ export default function App() {
   }, [addNote])
 
   // 所有便签的几何信息（吸附候选 + 画布尺寸）；折叠→条带映射单源 noteRect
-  const geometries = useMemo(
+  const geometries = useMemo<NoteGeometry[]>(
     () => notes.map((n) => ({ id: n.id, ...noteRect(n) })),
     [notes],
   )

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { handleEnter, handleTab, cleanupMarkdown } from '../editor'
+import { handleEnter, handleTab, cleanupMarkdown, splitAt, blockPadding } from '../editor'
 
 describe('handleEnter 列表续接', () => {
   it('无序列表回车续接', () => {
@@ -106,5 +106,35 @@ describe('cleanupMarkdown 语法清理', () => {
 
   it('不误伤分割线 ---', () => {
     expect(cleanupMarkdown('A\n\n---\n\nB').text).toBe('A\n\n---\n\nB')
+  })
+})
+
+describe('splitAt 选区切分（#38 同形提取）', () => {
+  it('常规区间：三段齐整', () => {
+    expect(splitAt('abcdef', 2, 4)).toEqual({ before: 'ab', selected: 'cd', after: 'ef' })
+  })
+
+  it('空选区（end=start）：selected 为空', () => {
+    expect(splitAt('abcdef', 3, 3)).toEqual({ before: 'abc', selected: '', after: 'def' })
+  })
+
+  it('越界钳制：start/end 超长收口；end < start 归一为空选区', () => {
+    expect(splitAt('abc', 2, 99)).toEqual({ before: 'ab', selected: 'c', after: '' })
+    expect(splitAt('abc', -1, 2)).toEqual({ before: '', selected: 'ab', after: 'c' })
+    expect(splitAt('abc', 2, 1)).toEqual({ before: 'ab', selected: '', after: 'c' })
+  })
+})
+
+describe('blockPadding 块插入空行补齐（#38 同形提取）', () => {
+  it('前面非空行 → 补双换行；单换行结尾 → 补一个；双换行结尾 → 不补', () => {
+    expect(blockPadding('text', '')).toEqual({ lead: '\n\n', tail: '' })
+    expect(blockPadding('text\n', '')).toEqual({ lead: '\n', tail: '' })
+    expect(blockPadding('text\n\n', '')).toEqual({ lead: '', tail: '' })
+  })
+
+  it('后面有内容且非换行开头 → 补单换行；空后缀 → 不补', () => {
+    expect(blockPadding('', 'after')).toEqual({ lead: '', tail: '\n' })
+    expect(blockPadding('', '\nafter')).toEqual({ lead: '', tail: '' })
+    expect(blockPadding('', '')).toEqual({ lead: '', tail: '' })
   })
 })

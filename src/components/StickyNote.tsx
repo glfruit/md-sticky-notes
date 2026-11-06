@@ -8,6 +8,7 @@ import { exportNote } from '@/lib/export'
 import { cleanupMarkdown } from '@/lib/editor'
 import { setTaskAtIndex, archiveCompletedTasks, convertListItemToTask, convertTaskToListItem, extractTasks, taskProgress, TASK_STATUS_META } from '@/lib/taskLines'
 import type { TaskStatus } from '@/lib/taskLines'
+import type { NoteGeometry } from '@/lib/layout'
 import { useNoteEditor } from '@/hooks/useNoteEditor'
 import { useNoteDrag } from '@/hooks/useNoteDrag'
 import { useNotePreview } from '@/hooks/useNotePreview'
@@ -27,7 +28,7 @@ interface Props {
   /** 侧栏选中后高亮闪烁 */
   flashing?: boolean
   /** 全部便签的几何信息（拖动吸附用，内部排除自身） */
-  snapTargets?: { id: string; x: number; y: number; width: number; height: number }[]
+  snapTargets?: NoteGeometry[]
   /** 桌面滚动层：拖动坐标换算 / 边缘自动滚动 */
   scrollRef?: React.RefObject<HTMLDivElement | null>
   /** 滚动画布：便签拖出视口时撑大内容区 */

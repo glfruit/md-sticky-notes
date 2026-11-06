@@ -150,6 +150,12 @@ export interface Size {
   height: number
 }
 
+/** 带身份的便签占位矩形：App geometries 构造与 StickyNote / useNoteDrag 的
+ *  snapTargets 形状单源（#38），三处不再手写同形内联类型。 */
+export interface NoteGeometry extends Rect {
+  id: string
+}
+
 /** 便签在画布上的占位矩形（AABB）：折叠 = 标题栏条带。
  *  「折叠取条带高」的映射知识单源在此——App geometries、pinnedRects、滚动可见性共用，
  *  调用方不再各自写 collapsed 分支。 */
@@ -164,6 +170,21 @@ export function pinnedRects(
   notes: (Pick<Rect, 'x' | 'y' | 'width' | 'height'> & { collapsed: boolean; pinned?: boolean })[],
 ): Rect[] {
   return notes.filter((n) => n.pinned).map(noteRect)
+}
+
+/** 最大化边距（绿点最大化时四周内缩 16px；与 tidy 网格边距 MARGIN 同值巧合、语义不同，不共享） */
+const MAXIMIZE_MARGIN = 16
+
+/** 最大化便签的占位几何（useNoteDrag toggleMaximize 消费，#38）：
+ *  左上贴 16px、四周内缩 2×16px、高度另扣菜单栏（28）与下边距——
+ *  即 innerHeight − 60（= MENU_BAR_H 28 + 上下 16×2），与头注释对照口径一致。 */
+export function maximizedRect(viewport: Size): Rect {
+  return {
+    x: MAXIMIZE_MARGIN,
+    y: MAXIMIZE_MARGIN,
+    width: viewport.width - MAXIMIZE_MARGIN * 2,
+    height: viewport.height - MENU_BAR_H - MAXIMIZE_MARGIN * 2,
+  }
 }
 
 /** 出生级联偏移带：原 addNote 公式同值（60 起步、36 步进、x 循环 320 / y 循环 240） */

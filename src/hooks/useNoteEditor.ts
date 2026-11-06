@@ -3,7 +3,7 @@ import type { StickyNoteData, RevealTarget } from '@/types/note'
 import { formatDate, formatTime, formatDateTime } from '@/lib/datetime'
 import { saveAttachment, attachmentUrl } from '@/lib/attachments'
 import { htmlTableToMarkdown, tsvToMarkdown } from '@/lib/tablePaste'
-import { handleEnter, handleTab } from '@/lib/editor'
+import { handleEnter, handleTab, splitAt, blockPadding } from '@/lib/editor'
 
 /** 编辑器机制半边（自 StickyNote 拆出，#32）：textarea 的插入 / 粘贴拖入 / 颜色 /
  *  键盘增强与光标 / 搜索选中 effects。纯搬迁（依赖数组逐字保留），可测逻辑在
@@ -70,8 +70,7 @@ export function useNoteEditor(opts: {
       }
       const start = ta.selectionStart ?? note.content.length
       const end = ta.selectionEnd ?? start
-      const before = note.content.slice(0, start)
-      const after = note.content.slice(end)
+      const { before, after } = splitAt(note.content, start, end)
       // 与上下文之间留一个空格，避免粘连
       const needLead = padSpaces && before && !/[\s\n]$/.test(before) ? ' ' : ''
       const needTail = padSpaces && after && !/^[\s\n]/.test(after) ? ' ' : ''
@@ -94,11 +93,9 @@ export function useNoteEditor(opts: {
       if (!ta) return
       const start = ta.selectionStart ?? note.content.length
       const end = ta.selectionEnd ?? start
-      const before = note.content.slice(0, start)
-      const after = note.content.slice(end)
+      const { before, after } = splitAt(note.content, start, end)
       // 表格块前后保证空行
-      const lead = before && !before.endsWith('\n\n') ? (before.endsWith('\n') ? '\n' : '\n\n') : ''
-      const tail = after && !after.startsWith('\n') ? '\n' : ''
+      const { lead, tail } = blockPadding(before, after)
       const header = `| ${Array.from({ length: cols }, (_, i) => `列${i + 1}`).join(' | ')} |`
       const sep = `|${' --- |'.repeat(cols)}`
       const body = Array.from({ length: rows }, () => `|${'  |'.repeat(cols)}`).join('\n')
@@ -118,10 +115,8 @@ export function useNoteEditor(opts: {
       const content = note.content
       const start = ta ? ta.selectionStart : content.length
       const end = ta ? ta.selectionEnd : start
-      const before = content.slice(0, start)
-      const after = content.slice(end)
-      const lead = before && !before.endsWith('\n\n') ? (before.endsWith('\n') ? '\n' : '\n\n') : ''
-      const tail = after && !after.startsWith('\n') ? '\n' : ''
+      const { before, after } = splitAt(content, start, end)
+      const { lead, tail } = blockPadding(before, after)
       const pos = start + lead.length + block.length
       pendingReveal.current = { start: pos, end: pos }
       onUpdate(note.id, { content: before + lead + block + tail + after })
@@ -213,14 +208,14 @@ export function useNoteEditor(opts: {
       if (!ta) return
       const start = ta.selectionStart ?? 0
       const end = ta.selectionEnd ?? start
-      const selected = note.content.slice(start, end)
+      const { before, selected, after } = splitAt(note.content, start, end)
       const open = `<span style="color:${color}">`
       const inner = selected || '文字'
       const wrapped = open + inner + '</span>'
       pendingReveal.current = selected
         ? { start: start + wrapped.length, end: start + wrapped.length }
         : { start: start + open.length, end: start + open.length + inner.length }
-      onUpdate(note.id, { content: note.content.slice(0, start) + wrapped + note.content.slice(end) })
+      onUpdate(note.id, { content: before + wrapped + after })
     },
     [note.id, note.content, onUpdate],
   )
@@ -231,10 +226,10 @@ export function useNoteEditor(opts: {
     if (!ta) return
     const start = ta.selectionStart ?? 0
     const end = ta.selectionEnd ?? start
-    const selected = note.content.slice(start, end)
+    const { before, selected, after } = splitAt(note.content, start, end)
     const cleaned = selected.replace(/<\/?span[^>]*>/g, '')
     pendingReveal.current = { start, end: start + cleaned.length }
-    onUpdate(note.id, { content: note.content.slice(0, start) + cleaned + note.content.slice(end) })
+    onUpdate(note.id, { content: before + cleaned + after })
   }, [note.id, note.content, onUpdate])
 
   // 窗口内键盘快捷键
