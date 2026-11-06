@@ -1,7 +1,12 @@
 import { useCallback, useRef, useState } from 'react'
 import type { StickyNoteData } from '@/types/note'
 import { MIN_W, MIN_H } from '@/types/note'
-import { snapValue, edgeCandidates, CANVAS_PAD, SNAP_VIEW_MARGIN } from '@/lib/layout'
+import { snapValue, edgeCandidates, maximizedRect, CANVAS_PAD, SNAP_VIEW_MARGIN } from '@/lib/layout'
+
+/** 边缘自动滚动手感参数（非几何域，不入 lib/layout）：指针距滚动层可视边缘
+ *  28px 内开始滚动（与 MENU_BAR_H 同值巧合），每帧步进 14px */
+const AUTO_SCROLL_EDGE = 28
+const AUTO_SCROLL_SPEED = 14
 
 /** 几何交互半边（自 StickyNote 拆出，#32）：拖动吸附 / 缩放 / 最大化。
  *  纯搬迁：拖动直写 DOM、pointerup 一次提交的既定模式不变，吸附与画布扩展的
@@ -30,10 +35,7 @@ export function useNoteDrag(opts: {
     } else {
       prevGeometry.current = { x: note.x, y: note.y, width: note.width, height: note.height }
       onUpdate(note.id, {
-        x: 16,
-        y: 16,
-        width: window.innerWidth - 32,
-        height: window.innerHeight - 60,
+        ...maximizedRect({ width: window.innerWidth, height: window.innerHeight }),
         collapsed: false,
       })
       setMaximized(true)
@@ -107,17 +109,15 @@ export function useNoteDrag(opts: {
       }
 
       // 边缘自动滚动：指针贴近可视边缘时持续滚动，便签跟随指针
-      const EDGE = 28
-      const SPEED = 14
       let raf = 0
       const tick = () => {
         if (sc) {
           const dx = pointerX - layerLeft
           const dy = pointerY - layerTop
-          if (dx < EDGE) sc.scrollLeft -= SPEED
-          else if (dx > sc.clientWidth - EDGE) sc.scrollLeft += SPEED
-          if (dy < EDGE) sc.scrollTop -= SPEED
-          else if (dy > sc.clientHeight - EDGE) sc.scrollTop += SPEED
+          if (dx < AUTO_SCROLL_EDGE) sc.scrollLeft -= AUTO_SCROLL_SPEED
+          else if (dx > sc.clientWidth - AUTO_SCROLL_EDGE) sc.scrollLeft += AUTO_SCROLL_SPEED
+          if (dy < AUTO_SCROLL_EDGE) sc.scrollTop -= AUTO_SCROLL_SPEED
+          else if (dy > sc.clientHeight - AUTO_SCROLL_EDGE) sc.scrollTop += AUTO_SCROLL_SPEED
         }
         apply()
         raf = requestAnimationFrame(tick)

@@ -5,6 +5,7 @@ import {
   noteRect,
   pinnedRects,
   canvasExtent,
+  maximizedRect,
   revealScroll,
   centerScroll,
   snapValue,
@@ -213,6 +214,19 @@ describe('canvasExtent 画布尺寸', () => {
   it('便签在视口内：不扩展（视口兜底）', () => {
     expect(canvasExtent([rect(0, 0, 300, 200)], { width: 1180, height: 700 }))
       .toEqual({ width: 1180, height: 672 })
+  })
+})
+
+describe('maximizedRect 最大化几何', () => {
+  it('左上贴 16、四周内缩 32、高另扣菜单栏 28（原 16/16/−32/−60 公式）', () => {
+    // 手算对照：1180−32=1148；700−60=640（= 700−28−16×2）
+    expect(maximizedRect({ width: 1180, height: 700 }))
+      .toEqual({ x: 16, y: 16, width: 1148, height: 640 })
+  })
+
+  it('小视口同样内缩（公式无下限钳制，与原行为一致）', () => {
+    expect(maximizedRect({ width: 400, height: 300 }))
+      .toEqual({ x: 16, y: 16, width: 368, height: 240 })
   })
 })
 
