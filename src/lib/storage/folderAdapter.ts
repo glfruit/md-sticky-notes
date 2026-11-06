@@ -68,14 +68,15 @@ export function makeFolderAdapter(folder: string, invoke: Invoke): FolderCapable
       }
     },
 
-    // 回收站 = 同步文件夹下的 .trash 子目录，复用现有命令
+    // 回收站 = 同步文件夹下的 .trash 子目录。移入/恢复走 move_note 单命令原子换位：
+    // write 目标 + delete 源两步之间崩溃会两处并存（云盘扩散中间态）——#31
     async trashNote(note) {
-      await invoke('write_note', {
-        folder: trashFolder(),
+      await invoke('move_note', {
+        fromFolder: folder,
+        toFolder: trashFolder(),
         id: note.id,
         text: serializeNote(note),
       })
-      await invoke('delete_note', { folder, id: note.id })
     },
 
     async listTrash() {
@@ -87,8 +88,12 @@ export function makeFolderAdapter(folder: string, invoke: Invoke): FolderCapable
     },
 
     async restoreTrash(note) {
-      await invoke('write_note', { folder, id: note.id, text: serializeNote(note) })
-      await invoke('delete_note', { folder: trashFolder(), id: note.id })
+      await invoke('move_note', {
+        fromFolder: trashFolder(),
+        toFolder: folder,
+        id: note.id,
+        text: serializeNote(note),
+      })
     },
 
     async deleteTrash(id) {
