@@ -78,10 +78,12 @@ describe('category 分类字段（#41）', () => {
   })
 
   it('历史文件无 category 行 / 空白串：解析归一 undefined', () => {
-    const noField = parseNoteFile('n', serializeNote(base).replace('z:', 'z:'))
-    expect(noField?.category).toBeUndefined()
-    const blank = serializeNote(base).replace('z: 1', 'category:   
-z: 1')
+    // 旧版文件（无 category 行）
+    const legacy = serializeNote(base)
+    expect(legacy).not.toContain('category')
+    expect(parseNoteFile('n', legacy)?.category).toBeUndefined()
+    // 空白串值归一 undefined（在 frontmatter 中插入空白 category 行）
+    const blank = legacy.replace(/^z: /m, 'category:   \nz: ')
     expect(parseNoteFile('n', blank)?.category).toBeUndefined()
   })
 })

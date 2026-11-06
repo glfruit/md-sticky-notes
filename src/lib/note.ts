@@ -49,3 +49,13 @@ export function collectCategories(notes: { category?: string }[]): string[] {
   }
   return [...set].sort((a, b) => a.localeCompare(b, 'zh-Hans-CN'))
 }
+
+/**
+ * 按分类筛选便签（#41，画布与侧栏列表共用的单源）：selected 为 null → 全部；
+ * 空串 → 无分类便签（「无分类」项的哨兵值）；非空 → 该分类。
+ */
+export function filterByCategory<T extends { category?: string }>(notes: T[], selected: string | null): T[] {
+  if (selected === null) return notes
+  if (selected === '') return notes.filter((n) => !n.category)
+  return notes.filter((n) => n.category === selected)
+}

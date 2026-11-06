@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { deriveTitle, extractTags, collectCategories } from '../note'
+import { deriveTitle, extractTags, collectCategories, filterByCategory } from '../note'
 
 describe('deriveTitle 标题推导', () => {
   it('取第一行非空文本并去 Markdown 标记', () => {
@@ -62,5 +62,24 @@ describe('collectCategories 分类清单（#41）', () => {
   it('空集合 / 全无分类：空数组', () => {
     expect(collectCategories([])).toEqual([])
     expect(collectCategories([{}, {}])).toEqual([])
+  })
+})
+
+describe('filterByCategory 分类筛选（#41）', () => {
+  const notes = [
+    { id: 'a', category: '工作' },
+    { id: 'b', category: '生活' },
+    { id: 'c' },
+    { id: 'd', category: '工作' },
+  ]
+  it('null = 全部（原数组引用返回）', () => {
+    expect(filterByCategory(notes, null)).toBe(notes)
+  })
+  it('空串 = 无分类哨兵', () => {
+    expect(filterByCategory(notes, '').map((n) => n.id)).toEqual(['c'])
+  })
+  it('分类名精确匹配', () => {
+    expect(filterByCategory(notes, '工作').map((n) => n.id)).toEqual(['a', 'd'])
+    expect(filterByCategory(notes, '不存在')).toEqual([])
   })
 })
