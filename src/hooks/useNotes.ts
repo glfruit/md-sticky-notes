@@ -3,7 +3,12 @@ import type { StickyNoteData, NoteColor } from '@/types/note'
 import { COLOR_ORDER } from '@/types/note'
 import { initStorage, getStorage, isTauri, setFolder } from '@/lib/storage'
 import { clearAttachmentCache, cleanOrphanAttachments } from '@/lib/attachments'
-import { findSpawnSpot, pinnedRects } from '@/lib/layout'
+import {
+  findSpawnSpot,
+  pinnedRects,
+  clampIntoScrollArea,
+  NEW_NOTE_SIZE,
+} from '@/lib/layout'
 import {
   mergeNotes,
   partitionTrash,
@@ -15,19 +20,13 @@ import {
 } from '@/lib/notesSync'
 
 /** 保存管线的时序布线层：防抖落盘 / flush / 文件夹监听 / 生命周期。
- *  合并仲裁、回收站 TTL、z 序治理、补丁政策、种子内容等纯决策在 lib/notesSync（可直测）。 */
+ *  合并仲裁、回收站 TTL、z 序治理、补丁政策、种子内容等纯决策在 lib/notesSync（可直测）；
+ *  画布几何（出生定位/初始尺寸/负坐标裁剪）单源在 lib/layout。 */
 
 const SEED_KEY = 'md-sticky-notes:seeded'
-/** 新建便签的初始尺寸（出生定位与建卡共用） */
-const NEW_NOTE_SIZE = { width: 300, height: 320 }
 
 let idCounter = 0
 const genId = () => `note-${Date.now().toString(36)}-${(idCounter++).toString(36)}`
-
-/** 历史数据可能存在负坐标：滚动桌面下裁剪到 ≥ 0，保证便签都能滚动到达 */
-function clampIntoScrollArea(n: StickyNoteData): StickyNoteData {
-  return n.x < 0 || n.y < 0 ? { ...n, x: Math.max(0, n.x), y: Math.max(0, n.y) } : n
-}
 
 export function useNotes() {
   const [notes, setNotes] = useState<StickyNoteData[]>([])
