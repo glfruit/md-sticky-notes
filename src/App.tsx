@@ -14,12 +14,16 @@ import { useReminders } from '@/hooks/useReminders'
 import { isTauri } from '@/lib/storage'
 import { exportAllNotes } from '@/lib/export'
 import { extractTasks, dueUrgency } from '@/lib/taskLines'
-import { tidyLayout } from '@/lib/layout'
+import {
+  tidyLayout,
+  noteRect,
+  canvasExtent,
+  revealScroll,
+  centerScroll,
+} from '@/lib/layout'
 import './App.css'
 
 const PIN_KEY = 'md-sticky-notes:sidebar-pinned'
-/** 菜单栏高度（滚动层起始 y） */
-const MENU_H = 28
 
 export default function App() {
   const { notes, trash, addNote, updateNote, deleteNote, bringToFront, switchFolder, cleanAttachments, flushPendingSaves, restoreTrashNote, permanentlyDeleteTrash } = useNotes()
@@ -31,14 +35,14 @@ export default function App() {
   const [sidebarPinned, setSidebarPinned] = useState(() => localStorage.getItem(PIN_KEY) === '1')
   const [sidebarHover, setSidebarHover] = useState(false)
   const [flashId, setFlashId] = useState<string | null>(null)
-  const [viewport, setViewport] = useState(() => ({ w: window.innerWidth, h: window.innerHeight }))
+  const [viewport, setViewport] = useState(() => ({ width: window.innerWidth, height: window.innerHeight }))
 
   useEffect(() => {
     localStorage.setItem(PIN_KEY, sidebarPinned ? '1' : '0')
   }, [sidebarPinned])
 
   useEffect(() => {
-    const onResize = () => setViewport({ w: window.innerWidth, h: window.innerHeight })
+    const onResize = () => setViewport({ width: window.innerWidth, height: window.innerHeight })
     window.addEventListener('resize', onResize)
     return () => window.removeEventListener('resize', onResize)
   }, [])
@@ -82,56 +86,39 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey)
   }, [addNote])
 
-  // 所有便签的几何信息（吸附候选 + 画布尺寸）
+  // 所有便签的几何信息（吸附候选 + 画布尺寸）；折叠→条带映射单源 noteRect
   const geometries = useMemo(
-    () =>
-      notes.map((n) => ({
-        id: n.id,
-        x: n.x,
-        y: n.y,
-        width: n.width,
-        height: n.collapsed ? 28 : n.height,
-      })),
+    () => notes.map((n) => ({ id: n.id, ...noteRect(n) })),
     [notes],
   )
 
   // 滚动画布尺寸：至少铺满滚动层，随最远便签边缘扩展（滚动条由此出现）
-  const canvasSize = useMemo(() => {
-    let w = viewport.w
-    let h = viewport.h - MENU_H
-    for (const g of geometries) {
-      w = Math.max(w, g.x + g.width + 24)
-      h = Math.max(h, g.y + g.height + 24)
-    }
-    return { w, h }
-  }, [geometries, viewport])
+  const canvasSize = useMemo(() => canvasExtent(geometries, viewport), [geometries, viewport])
 
-  // 把指定便签滚进可视区（侧栏选中 / 搜索跳转用）
-  const scrollToNote = useCallback(
-    (x: number, y: number, width: number, height: number) => {
-      const sc = scrollRef.current
-      if (!sc) return
-      const vw = sc.clientWidth
-      const vh = sc.clientHeight
-      if (x - 8 < sc.scrollLeft || x + width + 8 > sc.scrollLeft + vw) {
-        sc.scrollLeft = Math.max(0, x - Math.max(0, (vw - width) / 2))
-      }
-      if (y - 8 < sc.scrollTop || y + 40 > sc.scrollTop + vh) {
-        sc.scrollTop = Math.max(0, y - Math.max(0, (vh - Math.min(height, vh)) / 2))
-      }
-    },
-    [],
-  )
+  // 把指定便签滚进可视区（侧栏选中 / 搜索跳转用）：计算在 lib/layout revealScroll
+  const scrollToNote = useCallback((x: number, y: number, width: number, height: number) => {
+    const sc = scrollRef.current
+    if (!sc) return
+    const next = revealScroll(
+      { x, y, width, height },
+      { left: sc.scrollLeft, top: sc.scrollTop },
+      { width: sc.clientWidth, height: sc.clientHeight },
+    )
+    sc.scrollLeft = next.left
+    sc.scrollTop = next.top
+  }, [])
 
-  // 便签居中完整显示（右键菜单）：无论当前在哪都滚到正中；滚动量钳制在画布范围内，
-  // 便签比视口大时贴边、保证可见部分最大；不改便签几何数据
+  // 便签居中完整显示（右键菜单）：无论当前在哪都滚到正中；计算在 lib/layout centerScroll
   const scrollNoteCenter = useCallback((x: number, y: number, width: number, height: number) => {
     const sc = scrollRef.current
     if (!sc) return
-    const targetX = x + width / 2 - sc.clientWidth / 2
-    const targetY = y + height / 2 - sc.clientHeight / 2
-    sc.scrollLeft = Math.max(0, Math.min(targetX, sc.scrollWidth - sc.clientWidth))
-    sc.scrollTop = Math.max(0, Math.min(targetY, sc.scrollHeight - sc.clientHeight))
+    const next = centerScroll(
+      { x, y, width, height },
+      { width: sc.clientWidth, height: sc.clientHeight },
+      { width: sc.scrollWidth, height: sc.scrollHeight },
+    )
+    sc.scrollLeft = next.left
+    sc.scrollTop = next.top
   }, [])
 
   const centerNote = useCallback(
@@ -162,9 +149,9 @@ export default function App() {
       setReveal({ noteId: jump.noteId, start: jump.start, end: jump.end, query: jump.query, nonce: Date.now() })
       setSearchOpen(false)
       if (target) {
-        // 等展开 / 切编辑生效后再滚动
+        // 等展开 / 切编辑生效后再滚动（折叠便签按标题栏条带算可见性）
         requestAnimationFrame(() =>
-          scrollToNote(target.x, target.y, target.width, target.collapsed ? 28 : target.height),
+          scrollToNote(target.x, target.y, target.width, noteRect(target).height),
         )
       }
     },
@@ -251,7 +238,7 @@ export default function App() {
 
       {/* 滚动桌面：便签拖出视口时画布扩展、出现滚动条 */}
       <div ref={scrollRef} className="desktop-scroll absolute inset-x-0 top-7 bottom-0 overflow-auto">
-        <div ref={canvasRef} className="relative" style={{ width: canvasSize.w, height: canvasSize.h }}>
+        <div ref={canvasRef} className="relative" style={{ width: canvasSize.width, height: canvasSize.height }}>
           {notes.map((note) => (
             <StickyNote
               key={note.id}

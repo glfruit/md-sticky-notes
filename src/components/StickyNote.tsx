@@ -12,6 +12,7 @@ import { handleEnter, handleTab, cleanupMarkdown } from '@/lib/editor'
 import { setTaskAtIndex, archiveCompletedTasks, convertListItemToTask, convertTaskToListItem, extractTasks, taskProgress, TASK_STATUS_META } from '@/lib/taskLines'
 import type { TaskStatus } from '@/lib/taskLines'
 import { resolvePreviewContextMenu, stampIdx } from '@/lib/contextMenu'
+import { snapValue, edgeCandidates, CANVAS_PAD, SNAP_VIEW_MARGIN } from '@/lib/layout'
 import { Markdown } from './Markdown'
 import { FormatBar } from './FormatBar'
 import { Menu, MenuItem, MenuDivider } from './Menu'
@@ -580,19 +581,6 @@ export const StickyNote = memo(function StickyNote({
       let x = note.x
       let y = note.y
 
-      const SNAP = 8
-      const snap = (v: number, candidates: number[]): number => {
-        let best = v
-        let bestDist = SNAP + 1
-        for (const c of candidates) {
-          const d = Math.abs(v - c)
-          if (d < bestDist) {
-            bestDist = d
-            best = c
-          }
-        }
-        return best
-      }
       const targets = (snapTargets ?? []).filter((t) => t.id !== note.id)
 
       const apply = () => {
@@ -606,25 +594,32 @@ export const StickyNote = memo(function StickyNote({
         x = Math.max(0, x)
         y = Math.max(0, y)
         if (targets.length > 0 && sc) {
-          // 视口边缘（随滚动位置换算）+ 其他便签边缘
+          // 视口边缘（随滚动位置换算）+ 其他便签边缘（对齐候选线 lib/layout）
           const vw = sc.clientWidth
           const vh = sc.clientHeight
-          const xs: number[] = [sc.scrollLeft + 16, sc.scrollLeft + vw - 16 - note.width]
-          const ys: number[] = [sc.scrollTop + 16, sc.scrollTop + vh - 16 - note.height]
+          const xs: number[] = [
+            sc.scrollLeft + SNAP_VIEW_MARGIN,
+            sc.scrollLeft + vw - SNAP_VIEW_MARGIN - note.width,
+          ]
+          const ys: number[] = [
+            sc.scrollTop + SNAP_VIEW_MARGIN,
+            sc.scrollTop + vh - SNAP_VIEW_MARGIN - note.height,
+          ]
           for (const b of targets) {
-            xs.push(b.x, b.x + b.width, b.x + b.width - note.width)
-            ys.push(b.y, b.y + b.height, b.y + b.height - note.height)
+            const edges = edgeCandidates(b, { width: note.width, height: note.height })
+            xs.push(...edges.xs)
+            ys.push(...edges.ys)
           }
-          x = snap(x, xs)
-          y = snap(y, ys)
+          x = snapValue(x, xs)
+          y = snapValue(y, ys)
         }
         root.style.left = `${x}px`
         root.style.top = `${y}px`
         // 便签拖出当前画布时直接撑大（pointerup 后由 React 状态接管尺寸）
         const canvas = canvasRef?.current
         if (canvas) {
-          const needW = x + note.width + 24
-          const needH = y + note.height + 24
+          const needW = x + note.width + CANVAS_PAD
+          const needH = y + note.height + CANVAS_PAD
           if (needW > canvas.offsetWidth) canvas.style.width = `${needW}px`
           if (needH > canvas.offsetHeight) canvas.style.height = `${needH}px`
         }
