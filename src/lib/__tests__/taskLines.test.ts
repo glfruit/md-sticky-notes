@@ -68,6 +68,9 @@ describe('重复任务', () => {
     expect(resetRecurringTaskLine('- [x] 🔁每周五 周报', now)).toBe('- [ ] 2026-10-30 🔁每周五 周报')
     // 非重复任务返回 null
     expect(resetRecurringTaskLine('- [x] 普通任务', now)).toBeNull()
+    // #12：废弃标记 m[2]='-' 时，字符串 replace 会误伤列表符（首个 -），须按捕获组重组行首
+    expect(resetRecurringTaskLine('- [-] 🔁每天 记账', now)).toBe('- [ ] 2026-10-24 🔁每天 记账')
+    expect(resetRecurringTaskLine('  - [-] 🔁每3天 复盘', now)).toBe('  - [ ] 2026-10-26 🔁每3天 复盘')
   })
 
   it('setTaskAtIndex 完成重复任务时自动重置', () => {
@@ -75,6 +78,8 @@ describe('重复任务', () => {
     expect(setTaskAtIndex('- [ ] 2026-10-23 🔁每天 喝水', 0, 'done', now)).toBe(
       '- [ ] 2026-10-24 🔁每天 喝水',
     )
+    // #12 触发面：右键对废弃重复任务设「完成」
+    expect(setTaskAtIndex('- [-] 🔁每天 记账', 0, 'done', now)).toBe('- [ ] 2026-10-24 🔁每天 记账')
   })
 })
 
