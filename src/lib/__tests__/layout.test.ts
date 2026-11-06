@@ -1,5 +1,16 @@
 import { describe, it, expect } from 'vitest'
-import { tidyLayout, findSpawnSpot } from '../layout'
+import {
+  tidyLayout,
+  findSpawnSpot,
+  noteRect,
+  pinnedRects,
+  canvasExtent,
+  revealScroll,
+  centerScroll,
+  snapValue,
+  edgeCandidates,
+  clampIntoScrollArea,
+} from '../layout'
 
 const mk = (id: string, width: number, height: number, z = 0, collapsed = false) => ({
   id,
@@ -159,5 +170,155 @@ describe('findSpawnSpot 新便签出生定位（#8）', () => {
     // k=1：96+300=396 ≤ 400、52+320=372 = 400-28 恰好贴边 → 视为放得下
     const spot = spawn([rect(0, 0, 80, 30)], 0, { width: 400, height: 400 })
     expect(spot).toEqual({ x: 96, y: 52 })
+  })
+})
+
+describe('noteRect 折叠矩形映射', () => {
+  it('展开 = 完整矩形', () => {
+    expect(noteRect({ ...rect(10, 20, 300, 400), collapsed: false }))
+      .toEqual({ x: 10, y: 20, width: 300, height: 400 })
+  })
+
+  it('折叠 = 标题栏条带（COLLAPSED_H 高）', () => {
+    expect(noteRect({ ...rect(10, 20, 300, 400), collapsed: true }))
+      .toEqual({ x: 10, y: 20, width: 300, height: 28 })
+  })
+})
+
+describe('pinnedRects 置顶占位', () => {
+  it('只取置顶便签，映射与 noteRect 同源', () => {
+    const notes = [
+      { ...rect(0, 0, 100, 200), collapsed: false, pinned: true },
+      { ...rect(50, 50, 100, 200), collapsed: true, pinned: false },
+      { ...rect(90, 90, 100, 200), collapsed: true, pinned: true },
+    ]
+    expect(pinnedRects(notes)).toEqual([
+      { x: 0, y: 0, width: 100, height: 200 },
+      { x: 90, y: 90, width: 100, height: 28 },
+    ])
+  })
+})
+
+describe('canvasExtent 画布尺寸', () => {
+  it('无便签：铺满视口（高扣菜单栏 28）', () => {
+    expect(canvasExtent([], { width: 1180, height: 700 })).toEqual({ width: 1180, height: 672 })
+  })
+
+  it('便签超出视口：随最远边缘 + CANVAS_PAD(24) 扩展，多便签取最远', () => {
+    // 手算对照：右缘 1000+300+24=1324 > 1180；下缘 500+400+24=924 > 672
+    const size = canvasExtent([rect(100, 100, 300, 200), rect(1000, 500, 300, 400)], { width: 1180, height: 700 })
+    expect(size).toEqual({ width: 1324, height: 924 })
+  })
+
+  it('便签在视口内：不扩展（视口兜底）', () => {
+    expect(canvasExtent([rect(0, 0, 300, 200)], { width: 1180, height: 700 }))
+      .toEqual({ width: 1180, height: 672 })
+  })
+})
+
+describe('revealScroll 滚进可视区', () => {
+  const view = { width: 1180, height: 700 }
+
+  it('已可见：两轴都不打扰（返回原滚动位置）', () => {
+    // 100-8≥0 且 100+300+8≤1180；100-8≥0 且 100+40≤700
+    expect(revealScroll(rect(100, 100, 300, 200), { left: 0, top: 0 }, view))
+      .toEqual({ left: 0, top: 0 })
+  })
+
+  it('横向右溢出：该轴滚到居中，另一轴不动', () => {
+    // 手算对照：900+300+8=1208 > 1180 触发；left = 900-(1180-300)/2 = 900-440 = 460
+    expect(revealScroll(rect(900, 100, 300, 200), { left: 0, top: 0 }, view))
+      .toEqual({ left: 460, top: 0 })
+  })
+
+  it('纵向底部露出不足 40（标题栏不可见）：该轴滚到居中', () => {
+    // 手算对照：y+40=720 > 700 触发；top = 680-(700-200)/2 = 680-250 = 430
+    expect(revealScroll(rect(100, 680, 300, 200), { left: 0, top: 0 }, view))
+      .toEqual({ left: 0, top: 430 })
+  })
+
+  it('纵向恰好露出 40：不触发（严格大于语义）', () => {
+    // y+40=700 = view.height，不 > → 不打扰
+    expect(revealScroll(rect(100, 660, 300, 200), { left: 0, top: 0 }, view))
+      .toEqual({ left: 0, top: 0 })
+  })
+
+  it('便签比视口宽：贴 0 边（不产生负滚动）；已可见轴仍不打扰', () => {
+    // 手算对照：offX 触发（50+1300+8 > 10+1180），(1180-1300)/2 为负 → left = 50-0 = 50；
+    // y=60 在已滚视口 [10,710] 内可见（60+40=100 ≤ 710）→ top 保持原值 10
+    expect(revealScroll(rect(50, 60, 1300, 800), { left: 10, top: 10 }, view))
+      .toEqual({ left: 50, top: 10 })
+  })
+
+  it('便签比视口高且纵向越界：top 贴便签原点', () => {
+    // 手算对照：y-8=692 < 700 触发；(700-min(800,700)=700)/2=0 → top = 700-0 = 700
+    expect(revealScroll(rect(50, 700, 300, 800), { left: 0, top: 0 }, view))
+      .toEqual({ left: 0, top: 700 })
+  })
+})
+
+describe('centerScroll 滚到正中', () => {
+  it('目标在画布中部：两轴居中', () => {
+    // 手算对照：left = 600+150-500=250（≤ 1000 不钳）；top = 600+100-300=400（≤ 900 不钳）
+    expect(centerScroll(rect(600, 600, 300, 200), { width: 1000, height: 600 }, { width: 2000, height: 1500 }))
+      .toEqual({ left: 250, top: 400 })
+  })
+
+  it('目标偏出画布末端：钳到 scrollMax（画布-视口）', () => {
+    // 手算对照：left = 1700+150-500=1350 → min(1350,1000)=1000；top = 1300+100-300=1100 → min(1100,900)=900
+    expect(centerScroll(rect(1700, 1300, 300, 200), { width: 1000, height: 600 }, { width: 2000, height: 1500 }))
+      .toEqual({ left: 1000, top: 900 })
+  })
+
+  it('目标在画布头部：钳到 0（不产生负滚动）', () => {
+    // left = 100+150-500=-250 → max(0,·)=0
+    expect(centerScroll(rect(100, 100, 300, 200), { width: 1000, height: 600 }, { width: 2000, height: 1500 }))
+      .toEqual({ left: 0, top: 0 })
+  })
+
+  it('画布比视口还小：钳到 0', () => {
+    // content-view = -200/-100 → min 为负 → max(0,·)=0
+    expect(centerScroll(rect(600, 600, 300, 200), { width: 1000, height: 600 }, { width: 800, height: 500 }))
+      .toEqual({ left: 0, top: 0 })
+  })
+})
+
+describe('snapValue 拖动吸附', () => {
+  it('距候选 ≤ SNAP_DIST(8) 吸上（两侧对称）', () => {
+    expect(snapValue(108, [100])).toBe(100)
+    expect(snapValue(92, [100])).toBe(100)
+  })
+
+  it('距候选 9：不吸（原值返回）', () => {
+    expect(snapValue(109, [100])).toBe(109)
+  })
+
+  it('多候选取最近；无候选原值', () => {
+    expect(snapValue(105, [100, 103, 90])).toBe(103)
+    expect(snapValue(100, [])).toBe(100)
+  })
+
+  it('等距时先出现的候选获胜（保序语义，与原实现一致）', () => {
+    expect(snapValue(104, [100, 108])).toBe(100)
+  })
+})
+
+describe('edgeCandidates 对齐候选线', () => {
+  it('三值：左缘 / 右缘 / 右缘贴齐（目标右缘 − 拖动便签宽）', () => {
+    // 手算对照：xs = [100, 300, 300-300=0]；ys = [50, 170, 170-320=-150]
+    expect(edgeCandidates(rect(100, 50, 200, 120), { width: 300, height: 320 }))
+      .toEqual({ xs: [100, 300, 0], ys: [50, 170, -150] })
+  })
+})
+
+describe('clampIntoScrollArea 负坐标裁剪', () => {
+  it('非负坐标：原引用返回（零拷贝）', () => {
+    const n = { x: 10, y: 0, id: 'a' }
+    expect(clampIntoScrollArea(n)).toBe(n)
+  })
+
+  it('负坐标裁到 ≥ 0，其余字段保留', () => {
+    expect(clampIntoScrollArea({ x: -20, y: 50, id: 'a' })).toEqual({ x: 0, y: 50, id: 'a' })
+    expect(clampIntoScrollArea({ x: -20, y: -5, id: 'b' })).toEqual({ x: 0, y: 0, id: 'b' })
   })
 })

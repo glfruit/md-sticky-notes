@@ -1,8 +1,18 @@
-/** 整理布局纯函数层：一屏收纳的尺寸/位置计算，不 import React、不碰 DOM。
- *  供 App 的 tidyNotes 消费：产出的补丁批量写回便签。 */
+/** 画布几何纯函数层：便签在滚动画布上的位置/尺寸/滚动/吸附计算，不 import React、不碰 DOM。
+ *  供 App（画布尺寸/滚动/整理）、StickyNote（拖动吸附）、useNotes（出生定位/负坐标裁剪）消费；
+ *  菜单栏高/折叠条带高/画布边距/吸附距离等几何常量单源在此，组件不写副本。 */
 
-/** 菜单栏高度（App MENU_H 同值；maximize 的 innerHeight−60 即 28+上下边距 16×2） */
-const MENU_BAR_H = 28
+/** 菜单栏高度（滚动层起始 y；maximize 的 innerHeight−60 即 28+上下边距 16×2；
+ *  与 CSS 侧 top-7 / h-7 跨语言手工同步） */
+export const MENU_BAR_H = 28
+/** 画布随最远便签边缘扩展的边距（滚动条出现前留白；App 画布尺寸与拖动撑大同源） */
+export const CANVAS_PAD = 24
+/** 拖动吸附判定距离：距候选线 ≤ 此值即吸上 */
+export const SNAP_DIST = 8
+/** 视口边缘吸附边距（便签贴视口内 16px 对齐；与 tidy 网格边距 MARGIN 值同、语义不同，不合并） */
+export const SNAP_VIEW_MARGIN = 16
+/** 新建便签的初始尺寸（出生定位 findSpawnSpot 与建便签共用） */
+export const NEW_NOTE_SIZE = { width: 300, height: 320 }
 /** 网格边距 / 间距 / 首行纵坐标（原 tidyNotes 现值） */
 const MARGIN = 16
 const GAP = 12
@@ -140,14 +150,20 @@ export interface Size {
   height: number
 }
 
-/** 置顶便签的占位矩形（#8）：展开 = 完整矩形，折叠 = 标题栏条带。
- *  「折叠取条带高」的映射知识收敛在此，调用方不再各自分支。 */
+/** 便签在画布上的占位矩形（AABB）：折叠 = 标题栏条带。
+ *  「折叠取条带高」的映射知识单源在此——App geometries、pinnedRects、滚动可见性共用，
+ *  调用方不再各自写 collapsed 分支。 */
+export function noteRect(
+  n: Pick<Rect, 'x' | 'y' | 'width' | 'height'> & { collapsed: boolean },
+): Rect {
+  return { x: n.x, y: n.y, width: n.width, height: n.collapsed ? COLLAPSED_H : n.height }
+}
+
+/** 置顶便签的占位矩形（#8）：展开 = 完整矩形，折叠 = 标题栏条带。 */
 export function pinnedRects(
   notes: (Pick<Rect, 'x' | 'y' | 'width' | 'height'> & { collapsed: boolean; pinned?: boolean })[],
 ): Rect[] {
-  return notes
-    .filter((n) => n.pinned)
-    .map((n) => ({ x: n.x, y: n.y, width: n.width, height: n.collapsed ? COLLAPSED_H : n.height }))
+  return notes.filter((n) => n.pinned).map(noteRect)
 }
 
 /** 出生级联偏移带：原 addNote 公式同值（60 起步、36 步进、x 循环 320 / y 循环 240） */
@@ -208,4 +224,78 @@ export function findSpawnSpot(opts: {
     }
   }
   return preferred
+}
+
+/** 画布尺寸：至少铺满视口（扣除菜单栏高），随最远便签边缘 + CANVAS_PAD 扩展（滚动条由此出现）。
+ *  拖动中 StickyNote 直写 DOM 撑大画布用同一边距，pointerup 后由本函数（经 App 状态）接管。 */
+export function canvasExtent(rects: Rect[], viewport: Size): Size {
+  let width = viewport.width
+  let height = viewport.height - MENU_BAR_H
+  for (const r of rects) {
+    width = Math.max(width, r.x + r.width + CANVAS_PAD)
+    height = Math.max(height, r.y + r.height + CANVAS_PAD)
+  }
+  return { width, height }
+}
+
+/** revealScroll 的可见性余量：便签边缘允许压线 8px；纵向底部露出 ≥ 40px（标题栏可见）即算已看到 */
+const REVEAL_MARGIN = 8
+const REVEAL_MIN_VISIBLE_Y = 40
+
+/** 把便签滚进可视区（侧栏选中 / 搜索跳转用）：已（大体）可见的轴不打扰，
+ *  不可见的轴滚到居中（便签比视口大时贴 0 边）。返回应写回的滚动位置。 */
+export function revealScroll(
+  target: Rect,
+  scroll: { left: number; top: number },
+  view: Size,
+): { left: number; top: number } {
+  const offX =
+    target.x - REVEAL_MARGIN < scroll.left ||
+    target.x + target.width + REVEAL_MARGIN > scroll.left + view.width
+  const left = offX
+    ? Math.max(0, target.x - Math.max(0, (view.width - target.width) / 2))
+    : scroll.left
+  const offY =
+    target.y - REVEAL_MARGIN < scroll.top ||
+    target.y + REVEAL_MIN_VISIBLE_Y > scroll.top + view.height
+  const top = offY
+    ? Math.max(0, target.y - Math.max(0, (view.height - Math.min(target.height, view.height)) / 2))
+    : scroll.top
+  return { left, top }
+}
+
+/** 滚到便签正中（右键「居中完整显示」）：滚动量钳制在画布范围内，
+ *  便签比视口大时贴边、保证可见部分最大。 */
+export function centerScroll(target: Rect, view: Size, content: Size): { left: number; top: number } {
+  return {
+    left: Math.max(0, Math.min(target.x + target.width / 2 - view.width / 2, content.width - view.width)),
+    top: Math.max(0, Math.min(target.y + target.height / 2 - view.height / 2, content.height - view.height)),
+  }
+}
+
+/** 拖动吸附：v 距任一候选线 ≤ SNAP_DIST 时取最近候选，否则原值 */
+export function snapValue(v: number, candidates: number[]): number {
+  let best = v
+  let bestDist = SNAP_DIST + 1
+  for (const c of candidates) {
+    const d = Math.abs(v - c)
+    if (d < bestDist) {
+      bestDist = d
+      best = c
+    }
+  }
+  return best
+}
+
+/** 目标便签产生的对齐候选线：左缘 / 右缘 / 右缘贴齐（目标右缘对齐拖动便签右缘） */
+export function edgeCandidates(target: Rect, size: Size): { xs: number[]; ys: number[] } {
+  return {
+    xs: [target.x, target.x + target.width, target.x + target.width - size.width],
+    ys: [target.y, target.y + target.height, target.y + target.height - size.height],
+  }
+}
+
+/** 历史数据可能存在负坐标：滚动桌面下裁剪到 ≥ 0，保证便签都能滚动到达 */
+export function clampIntoScrollArea<N extends { x: number; y: number }>(n: N): N {
+  return n.x < 0 || n.y < 0 ? { ...n, x: Math.max(0, n.x), y: Math.max(0, n.y) } : n
 }
