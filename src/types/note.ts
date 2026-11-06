@@ -17,6 +17,8 @@ export interface StickyNoteData {
   pinned?: boolean
   /** 半透明（磨砂玻璃效果） */
   translucent?: boolean
+  /** 分类（单值，自由文本；持久化 frontmatter 字段名 category 不可改名） */
+  category?: string
   z: number
   updatedAt: number
 }

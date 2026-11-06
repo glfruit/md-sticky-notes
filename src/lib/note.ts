@@ -36,3 +36,26 @@ export function extractTags(content: string): string[] {
   return [...out]
 }
 
+
+/**
+ * 便签集合的全部分类清单（侧栏筛选 chip 行数据源）：去空、去重、按名排序（本地化比较）。
+ * category 是便签元数据（frontmatter），与内容里的 ＃标签（extractTags）语义不同、互不打通。
+ */
+export function collectCategories(notes: { category?: string }[]): string[] {
+  const set = new Set<string>()
+  for (const n of notes) {
+    const c = n.category?.trim()
+    if (c) set.add(c)
+  }
+  return [...set].sort((a, b) => a.localeCompare(b, 'zh-Hans-CN'))
+}
+
+/**
+ * 按分类筛选便签（#41，画布与侧栏列表共用的单源）：selected 为 null → 全部；
+ * 空串 → 无分类便签（「无分类」项的哨兵值）；非空 → 该分类。
+ */
+export function filterByCategory<T extends { category?: string }>(notes: T[], selected: string | null): T[] {
+  if (selected === null) return notes
+  if (selected === '') return notes.filter((n) => !n.category)
+  return notes.filter((n) => n.category === selected)
+}

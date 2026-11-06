@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useRef, useState } from 'react'
-import { Calendar, Clock, CalendarClock, Eye, PencilLine, Check, Download, Pin } from 'lucide-react'
+import { Calendar, Clock, CalendarClock, Eye, PencilLine, Check, Download, Pin, Tag } from 'lucide-react'
 import type { StickyNoteData, RevealTarget } from '@/types/note'
 import { NOTE_COLORS, COLOR_ORDER } from '@/types/note'
 import { formatUpdatedAt } from '@/lib/datetime'
@@ -29,6 +29,8 @@ interface Props {
   flashing?: boolean
   /** 全部便签的几何信息（拖动吸附用，内部排除自身） */
   snapTargets?: NoteGeometry[]
+  /** 全库分类清单（指定分类 popover 的候选 chips） */
+  categories?: string[]
   /** 桌面滚动层：拖动坐标换算 / 边缘自动滚动 */
   scrollRef?: React.RefObject<HTMLDivElement | null>
   /** 滚动画布：便签拖出视口时撑大内容区 */
@@ -45,6 +47,7 @@ export const StickyNote = memo(function StickyNote({
   reveal,
   flashing,
   snapTargets,
+  categories,
   scrollRef,
   canvasRef,
 }: Props) {
@@ -55,6 +58,14 @@ export const StickyNote = memo(function StickyNote({
   const previewRef = useRef<HTMLDivElement>(null)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [colorPickerOpen, setColorPickerOpen] = useState(false)
+  // 指定分类 popover（换色同款模式：便签内 absolute + 指针离开关闭）
+  const [categoryOpen, setCategoryOpen] = useState(false)
+  const [categoryInput, setCategoryInput] = useState('')
+  const applyCategory = (c: string | undefined) => {
+    onUpdate(note.id, { category: c })
+    setCategoryOpen(false)
+    setCategoryInput('')
+  }
 
   // 预览区交互半边（双通道进编辑 / 复选框 / ▾ 菜单 / 右键路由 / 搜索高亮 +
   // 任务状态·列表转换菜单状态）：hooks/useNotePreview
@@ -316,6 +327,70 @@ export const StickyNote = memo(function StickyNote({
           >
             <Pin size={13} className={note.pinned ? 'fill-current' : ''} />
           </button>
+          {/* 指定分类（#41）：Tag 图标，有分类时高亮琥珀 */}
+          <div className="relative">
+            <button
+              className={
+                note.category
+                  ? 'p-1 rounded hover:bg-stone-900/8 text-amber-600 hover:text-amber-700 transition-colors'
+                  : iconBtn
+              }
+              onClick={() => setCategoryOpen((v) => !v)}
+              title={note.category ? `分类：${note.category}（点击更改）` : '设置分类'}
+            >
+              <Tag size={12} />
+            </button>
+            {categoryOpen && (
+              <div
+                className="absolute right-0 top-6 flex flex-col gap-1.5 p-2 rounded-md bg-white/95 shadow-lg border border-stone-200 z-50 w-36"
+                onPointerLeave={() => setCategoryOpen(false)}
+              >
+                <input
+                  className="w-full px-1.5 py-1 text-[11px] rounded border border-stone-200 focus:outline-none focus:border-amber-500"
+                  placeholder="新分类名，回车确认"
+                  maxLength={24}
+                  // 打开即聚焦：可直接输入，Escape 关闭语义在任意焦点状态下可达（standards）
+                  autoFocus
+                  value={categoryInput}
+                  onChange={(e) => setCategoryInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      const c = categoryInput.trim()
+                      if (c) applyCategory(c)
+                    } else if (e.key === 'Escape') {
+                      setCategoryOpen(false)
+                    }
+                  }}
+                />
+                {(categories ?? []).length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {(categories ?? []).map((c) => (
+                      <button
+                        key={c}
+                        className={`px-1.5 py-0.5 rounded text-[10px] border transition-colors ${
+                          c === note.category
+                            ? 'bg-amber-100 border-amber-400 text-amber-800'
+                            : 'border-stone-200 text-black/60 hover:bg-black/5'
+                        }`}
+                        onClick={() => applyCategory(c)}
+                      >
+                        {c}
+                      </button>
+                    ))}
+                  </div>
+                )}
+                {note.category && (
+                  <button
+                    className="px-1 py-0.5 rounded text-[10px] text-black/50 hover:bg-black/5 text-left"
+                    onClick={() => applyCategory(undefined)}
+                  >
+                    × 清除分类
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+
           {/* 换色 */}
           <div className="relative">
             <button

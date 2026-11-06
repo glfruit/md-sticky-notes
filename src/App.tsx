@@ -14,6 +14,7 @@ import { useReminders } from '@/hooks/useReminders'
 import { isTauri } from '@/lib/storage'
 import { exportAllNotes } from '@/lib/export'
 import { extractTasks, dueUrgency } from '@/lib/taskLines'
+import { collectCategories, filterByCategory } from '@/lib/note'
 import {
   tidyLayout,
   noteRect,
@@ -25,6 +26,8 @@ import {
 import './App.css'
 
 const PIN_KEY = 'md-sticky-notes:sidebar-pinned'
+/** 分类筛选持久化（#41）：''=无分类哨兵、缺省=全部 */
+const CATEGORY_KEY = 'md-sticky-notes:category-filter'
 
 export default function App() {
   const { notes, trash, addNote, updateNote, deleteNote, bringToFront, switchFolder, cleanAttachments, flushPendingSaves, restoreTrashNote, permanentlyDeleteTrash } = useNotes()
@@ -37,10 +40,19 @@ export default function App() {
   const [sidebarHover, setSidebarHover] = useState(false)
   const [flashId, setFlashId] = useState<string | null>(null)
   const [viewport, setViewport] = useState(() => ({ width: window.innerWidth, height: window.innerHeight }))
+  // 分类筛选（#41）：null=全部、''=无分类（哨兵，见 filterByCategory）；刷新保持
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(
+    () => localStorage.getItem(CATEGORY_KEY),
+  )
 
   useEffect(() => {
     localStorage.setItem(PIN_KEY, sidebarPinned ? '1' : '0')
   }, [sidebarPinned])
+
+  useEffect(() => {
+    if (selectedCategory === null) localStorage.removeItem(CATEGORY_KEY)
+    else localStorage.setItem(CATEGORY_KEY, selectedCategory)
+  }, [selectedCategory])
 
   useEffect(() => {
     const onResize = () => setViewport({ width: window.innerWidth, height: window.innerHeight })
@@ -87,14 +99,23 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey)
   }, [addNote])
 
-  // 所有便签的几何信息（吸附候选 + 画布尺寸）；折叠→条带映射单源 noteRect
+  // 画布可见便签（#41 分类筛选）：渲染与几何派生（吸附候选 / 画布尺寸）同步收窄
+  const canvasNotes = useMemo(
+    () => filterByCategory(notes, selectedCategory),
+    [notes, selectedCategory],
+  )
+
+  // 可见便签的几何信息（吸附候选 + 画布尺寸）；折叠→条带映射单源 noteRect
   const geometries = useMemo<NoteGeometry[]>(
-    () => notes.map((n) => ({ id: n.id, ...noteRect(n) })),
-    [notes],
+    () => canvasNotes.map((n) => ({ id: n.id, ...noteRect(n) })),
+    [canvasNotes],
   )
 
   // 滚动画布尺寸：至少铺满滚动层，随最远便签边缘扩展（滚动条由此出现）
   const canvasSize = useMemo(() => canvasExtent(geometries, viewport), [geometries, viewport])
+
+  // 全库分类清单（便签 popover 的候选 chips，不受当前筛选影响）
+  const categories = useMemo(() => collectCategories(notes), [notes])
 
   // 把指定便签滚进可视区（侧栏选中 / 搜索跳转用）：计算在 lib/layout revealScroll
   const scrollToNote = useCallback((x: number, y: number, width: number, height: number) => {
@@ -146,6 +167,10 @@ export default function App() {
   const handleJump = useCallback(
     (jump: SearchJump) => {
       const target = notes.find((n) => n.id === jump.noteId)
+      // 搜索面板是全量的：跳转目标可能被分类筛选隐藏，清除筛选确保可见（#41）
+      if (target && selectedCategory !== null && filterByCategory([target], selectedCategory).length === 0) {
+        setSelectedCategory(null)
+      }
       bringToFront(jump.noteId)
       setReveal({ noteId: jump.noteId, start: jump.start, end: jump.end, query: jump.query, nonce: Date.now() })
       setSearchOpen(false)
@@ -156,7 +181,7 @@ export default function App() {
         )
       }
     },
-    [notes, bringToFront, scrollToNote],
+    [notes, selectedCategory, bringToFront, scrollToNote],
   )
 
   // 侧栏选中便签：置顶、展开并短暂高亮
@@ -235,12 +260,14 @@ export default function App() {
         onHoverLeave={() => setSidebarHover(false)}
         onRestore={restoreTrashNote}
         onPermanentDelete={permanentlyDeleteTrash}
+        selectedCategory={selectedCategory}
+        onSelectCategory={setSelectedCategory}
       />
 
-      {/* 滚动桌面：便签拖出视口时画布扩展、出现滚动条 */}
+      {/* 滚动桌面：便签拖出视口时画布扩展、出现滚动条（分类筛选下只渲染可见便签） */}
       <div ref={scrollRef} className="desktop-scroll absolute inset-x-0 top-7 bottom-0 overflow-auto">
         <div ref={canvasRef} className="relative" style={{ width: canvasSize.width, height: canvasSize.height }}>
-          {notes.map((note) => (
+          {canvasNotes.map((note) => (
             <StickyNote
               key={note.id}
               note={note}
@@ -251,6 +278,7 @@ export default function App() {
               reveal={reveal && reveal.noteId === note.id ? reveal : null}
               flashing={flashId === note.id}
               snapTargets={geometries}
+              categories={categories}
               scrollRef={scrollRef}
               canvasRef={canvasRef}
             />
@@ -262,6 +290,13 @@ export default function App() {
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
           <div className="text-stone-600 text-sm bg-white/70 border border-stone-900/10 backdrop-blur px-4 py-2 rounded-lg">
             没有便签了 — 按 ⌥N 或点菜单栏「新建」
+          </div>
+        </div>
+      )}
+      {notes.length > 0 && canvasNotes.length === 0 && (
+        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+          <div className="text-stone-600 text-sm bg-white/70 border border-stone-900/10 backdrop-blur px-4 py-2 rounded-lg">
+            当前分类下没有便签 — 侧栏点「全部」恢复显示
           </div>
         </div>
       )}

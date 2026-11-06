@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Pin, PinOff, Plus, Trash2 } from 'lucide-react'
 import type { StickyNoteData } from '@/types/note'
 import { NOTE_COLORS } from '@/types/note'
-import { deriveTitle, extractTags } from '@/lib/note'
+import { deriveTitle, extractTags, collectCategories, filterByCategory } from '@/lib/note'
 import { formatUpdatedAt } from '@/lib/datetime'
 import { extractTasks, TASK_STATUS_META, dueUrgency, DUE_LEVEL_COLORS } from '@/lib/taskLines'
 import { groupTasks, TASK_GROUP_META } from '@/lib/taskGroups'
@@ -19,6 +19,9 @@ interface Props {
   onHoverLeave: () => void
   onRestore: (id: string) => void
   onPermanentDelete: (id: string) => void
+  /** 分类筛选（#41）：选中属主在 App（同时驱动画布过滤），null=全部、''=无分类 */
+  selectedCategory: string | null
+  onSelectCategory: (c: string | null) => void
 }
 
 /** 去掉 markdown 符号的纯文本摘要（保留正文标点，如日期里的连字符） */
@@ -246,6 +249,8 @@ export function Sidebar({
   onHoverLeave,
   onRestore,
   onPermanentDelete,
+  selectedCategory,
+  onSelectCategory,
 }: Props) {
   const sorted = useMemo(() => [...notes].sort((a, b) => b.updatedAt - a.updatedAt), [notes])
   const [tab, setTab] = useState<'notes' | 'tasks' | 'trash'>('notes')
@@ -258,13 +263,14 @@ export function Sidebar({
     }
     return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
   }, [notes])
-  const visibleNotes = useMemo(
-    () =>
-      tagFilter === null
-        ? sorted
-        : sorted.filter((n) => extractTags(n.content).includes(tagFilter)),
-    [sorted, tagFilter],
-  )
+  const categories = useMemo(() => collectCategories(notes), [notes])
+  // 列表过滤 = 分类（App 属主，画布同源）∩ 标签（侧栏内部态）
+  const visibleNotes = useMemo(() => {
+    const byCategory = filterByCategory(sorted, selectedCategory)
+    return tagFilter === null
+      ? byCategory
+      : byCategory.filter((n) => extractTags(n.content).includes(tagFilter))
+  }, [sorted, selectedCategory, tagFilter])
   const openTaskCount = useMemo(
     () =>
       notes.reduce(
@@ -319,6 +325,48 @@ export function Sidebar({
       <div className="flex-1 overflow-y-auto py-1">
         {tab === 'notes' && (
           <>
+            {/* 分类筛选（#41）：选中同时过滤画布（属主在 App）；再点取消。
+                有选中时行恒渲染（哪怕清单已空）——否则清空选中分类的全部便签后
+                「全部」chip 消失，画布卡在空筛选态无法恢复（评审发现） */}
+            {(categories.length > 0 || selectedCategory !== null) && (
+              <div className="flex flex-wrap gap-1 px-3 pt-1.5 pb-1 border-b border-black/5">
+                <button
+                  className={`px-1.5 h-[19px] rounded-full text-[10.5px] transition-colors ${
+                    selectedCategory === null
+                      ? 'bg-amber-500/15 text-amber-700 font-medium'
+                      : 'text-black/45 hover:bg-black/5'
+                  }`}
+                  onClick={() => onSelectCategory(null)}
+                >
+                  全部 {notes.length}
+                </button>
+                {notes.some((n) => !n.category) && (
+                  <button
+                    className={`px-1.5 h-[19px] rounded-full text-[10.5px] transition-colors ${
+                      selectedCategory === ''
+                        ? 'bg-amber-500/15 text-amber-700 font-medium'
+                        : 'text-black/45 hover:bg-black/5'
+                    }`}
+                    onClick={() => onSelectCategory(selectedCategory === '' ? null : '')}
+                  >
+                    无分类 {notes.filter((n) => !n.category).length}
+                  </button>
+                )}
+                {categories.map((c) => (
+                  <button
+                    key={c}
+                    className={`px-1.5 h-[19px] rounded-full text-[10.5px] transition-colors ${
+                      selectedCategory === c
+                        ? 'bg-amber-500/15 text-amber-700 font-medium'
+                        : 'text-black/45 hover:bg-black/5'
+                    }`}
+                    onClick={() => onSelectCategory(selectedCategory === c ? null : c)}
+                  >
+                    {c} {notes.filter((n) => n.category === c).length}
+                  </button>
+                ))}
+              </div>
+            )}
             {tagCounts.length > 0 && (
               <div className="flex flex-wrap gap-1 px-3 pt-1.5 pb-1 border-b border-black/5">
                 <button
