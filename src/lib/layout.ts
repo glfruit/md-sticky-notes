@@ -150,6 +150,12 @@ export interface Size {
   height: number
 }
 
+/** 带身份的便签占位矩形：App geometries 构造与 StickyNote / useNoteDrag 的
+ *  snapTargets 形状单源（#38），三处不再手写同形内联类型。 */
+export interface NoteGeometry extends Rect {
+  id: string
+}
+
 /** 便签在画布上的占位矩形（AABB）：折叠 = 标题栏条带。
  *  「折叠取条带高」的映射知识单源在此——App geometries、pinnedRects、滚动可见性共用，
  *  调用方不再各自写 collapsed 分支。 */

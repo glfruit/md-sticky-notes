@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from 'react'
 import type { StickyNoteData } from '@/types/note'
 import { MIN_W, MIN_H } from '@/types/note'
 import { snapValue, edgeCandidates, maximizedRect, CANVAS_PAD, SNAP_VIEW_MARGIN } from '@/lib/layout'
+import type { NoteGeometry, Rect } from '@/lib/layout'
 
 /** 边缘自动滚动手感参数（非几何域，不入 lib/layout）：指针距滚动层可视边缘
  *  28px 内开始滚动（与 MENU_BAR_H 同值巧合），每帧步进 14px */
@@ -15,7 +16,7 @@ export function useNoteDrag(opts: {
   note: StickyNoteData
   rootRef: React.RefObject<HTMLDivElement | null>
   /** 全部便签的几何信息（吸附候选，内部排除自身） */
-  snapTargets?: { id: string; x: number; y: number; width: number; height: number }[]
+  snapTargets?: NoteGeometry[]
   /** 桌面滚动层：拖动坐标换算 / 边缘自动滚动 */
   scrollRef?: React.RefObject<HTMLDivElement | null>
   /** 滚动画布：便签拖出视口时撑大内容区 */
@@ -25,7 +26,7 @@ export function useNoteDrag(opts: {
 }) {
   const { note, rootRef, snapTargets, scrollRef, canvasRef, onUpdate, onFocus } = opts
   const [maximized, setMaximized] = useState(false)
-  const prevGeometry = useRef<{ x: number; y: number; width: number; height: number } | null>(null)
+  const prevGeometry = useRef<Rect | null>(null)
 
   // 绿点：最大化 / 还原（macOS 语义）；坐标为滚动画布内容坐标（菜单栏下方）
   const toggleMaximize = useCallback(() => {
