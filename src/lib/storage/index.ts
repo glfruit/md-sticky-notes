@@ -1,7 +1,7 @@
 import { localAdapter } from './localAdapter'
 import { makeFolderAdapter } from './folderAdapter'
 import type { Invoke } from './folderAdapter'
-import type { StorageAdapter } from './types'
+import type { StorageAdapter, FolderCapable } from './types'
 
 const FOLDER_KEY = 'md-sticky-notes:folder'
 
@@ -9,12 +9,22 @@ let adapter: StorageAdapter = localAdapter
 let folderPath: string | null = null
 let tauriInvoke: Invoke | null = null
 
+/** 类型谓词：folder 态的 adapter 即 FolderCapable（唯一来源 makeFolderAdapter，无第二实例源） */
+function isFolderCapable(a: StorageAdapter): a is FolderCapable {
+  return a.kind === 'folder'
+}
+
 export function isTauri(): boolean {
   return typeof window !== 'undefined' && '__TAURI_INTERNALS__' in window
 }
 
 export function getStorage(): StorageAdapter {
   return adapter
+}
+
+/** 文件夹管理能力单点收窄（null = 网页版 / 桌面未初始化）：桌面专属操作全在 FolderCapable */
+export function getFolderCapable(): FolderCapable | null {
+  return isFolderCapable(adapter) ? adapter : null
 }
 
 export function getFolder(): string | null {
@@ -71,37 +81,4 @@ export async function initStorage(): Promise<void> {
 export async function setFolder(path: string): Promise<void> {
   if (!tauriInvoke) return
   applyFolder(path)
-}
-
-/** 弹出系统文件夹选择器，返回选择的路径（取消返回 null） */
-export async function pickFolder(): Promise<string | null> {
-  if (!tauriInvoke) return null
-  return tauriInvoke<string | null>('pick_folder')
-}
-
-const SYNC_ROOT_LABELS: Record<string, string> = {
-  'Nutstore Files': '坚果云',
-  '我的坚果云': '坚果云',
-  'iCloud Drive': 'iCloud Drive',
-  Dropbox: 'Dropbox',
-}
-
-/** 同步服务显示名（无法识别的目录名原样返回） */
-export function syncRootLabel(root: string): string {
-  return SYNC_ROOT_LABELS[root] ?? root
-}
-
-/** 检测路径是否在云盘同步目录内：返回同步服务名，不在任何同步目录内返回空串 */
-export async function detectSyncRoot(path: string): Promise<string> {
-  if (!tauriInvoke) return ''
-  return tauriInvoke<string>('detect_sync_root', { path })
-}
-
-/** 把旧同步文件夹的数据（便签 / 回收站 / 附件）复制到新文件夹，跳过已存在文件；返回三类数量 */
-export async function migrateFolderData(
-  from: string,
-  to: string,
-): Promise<[number, number, number]> {
-  if (!tauriInvoke) return [0, 0, 0]
-  return tauriInvoke<[number, number, number]>('copy_folder_contents', { from, to })
 }
