@@ -222,3 +222,27 @@ export function cleanupMarkdown(content: string): CleanupResult {
     text === content ? [] : [...counts.entries()].map(([k, n]) => (n > 1 ? `${k}×${n}` : k))
   return { text, fixes }
 }
+
+// ---------- 选区与块插入（useNoteEditor 消费，#38 同形提取） ----------
+
+/** 把 content 按选区 [start, end) 切成三段（DOM selection 合法输入下不做钳制之外的事）。
+ *  越界钳到 [0, length]、end < start 时归一为空选区——防御性契约，正常路径逐字等价于
+ *  原五处手写 slice。 */
+export function splitAt(
+  content: string,
+  start: number,
+  end: number,
+): { before: string; selected: string; after: string } {
+  const s = Math.max(0, Math.min(start, content.length))
+  const e = Math.max(s, Math.min(end, content.length))
+  return { before: content.slice(0, s), selected: content.slice(s, e), after: content.slice(e) }
+}
+
+/** 块级内容（图片引用 / 表格）插入前后的空行补齐：前保双换行、后保单换行。
+ *  insertTable / insertBlock 原两处逐字同形，提取单源。 */
+export function blockPadding(before: string, after: string): { lead: string; tail: string } {
+  return {
+    lead: before && !before.endsWith('\n\n') ? (before.endsWith('\n') ? '\n' : '\n\n') : '',
+    tail: after && !after.startsWith('\n') ? '\n' : '',
+  }
+}
