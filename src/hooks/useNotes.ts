@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { StickyNoteData, NoteColor } from '@/types/note'
 import { COLOR_ORDER } from '@/types/note'
-import { initStorage, getStorage, isTauri, setFolder } from '@/lib/storage'
+import { initStorage, getStorage, getFolderCapable, isTauri, setFolder } from '@/lib/storage'
 import { clearAttachmentCache, cleanOrphanAttachments } from '@/lib/attachments'
 import {
   findSpawnSpot,
@@ -252,39 +252,36 @@ export function useNotes() {
     [],
   )
 
-  // 桌面版：窗口重新获得焦点时从文件夹拉一次（另一台机器的改动同步进来）
+  // 有外部变更源（文件夹存储会被另一台机器 / 云盘客户端改动）：窗口重新获得焦点拉一次
   useEffect(() => {
     if (!loaded) return
     const onFocus = () => {
-      if (getStorage().kind === 'folder') void reload()
+      if (getFolderCapable()) void reload()
     }
     window.addEventListener('focus', onFocus)
     return () => window.removeEventListener('focus', onFocus)
   }, [loaded, reload])
 
-  // 桌面版：Rust 文件夹监听事件 → 去抖后增量重载（保持聚焦时也能同步另一台机器的改动）
+  // 外部变更订阅（订阅机制在 adapter：FolderCapable.subscribeChanges 封装 Tauri 事件）
+  // → 去抖 300ms 后增量重载（去抖是消费策略，留在 hook）
   useEffect(() => {
-    if (!loaded || !isTauri()) return
-    let unlisten: (() => void) | undefined
+    if (!loaded) return
+    const capable = getFolderCapable()
+    if (!capable) return
     let timer = 0
-    void import('@tauri-apps/api/event').then(({ listen }) =>
-      listen('folder-changed', () => {
-        if (getStorage().kind !== 'folder') return
-        window.clearTimeout(timer)
-        timer = window.setTimeout(() => void reload(), 300)
-      }).then((fn) => {
-        unlisten = fn
-      }),
-    )
+    const unsubscribe = capable.subscribeChanges(() => {
+      window.clearTimeout(timer)
+      timer = window.setTimeout(() => void reload(), 300)
+    })
     return () => {
-      unlisten?.()
+      unsubscribe()
       window.clearTimeout(timer)
     }
   }, [loaded, reload])
 
-  // 文件夹模式：启动 15 秒后清理孤儿附件（等云盘同步先拉全文件）
+  // 文件夹存储：启动 15 秒后清理孤儿附件（等云盘同步先拉全文件）
   useEffect(() => {
-    if (!loaded || getStorage().kind !== 'folder') return
+    if (!loaded || !getFolderCapable()) return
     const t = window.setTimeout(() => void cleanAttachments(), 15_000)
     return () => window.clearTimeout(t)
   }, [loaded, cleanAttachments])

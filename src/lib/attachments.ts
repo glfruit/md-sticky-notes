@@ -1,5 +1,5 @@
 import type { StickyNoteData } from '@/types/note'
-import { getStorage } from './storage'
+import { getStorage, getFolderCapable } from './storage'
 
 /** 生成带扩展名的附件 id（扩展名取自 MIME 类型，文件夹模式下直接用作文件名） */
 function makeAttachmentId(blob: Blob): string {
@@ -54,14 +54,14 @@ const ATTACHMENT_REF_RE = /attachment:\/\/([^\s)]+)/g
 
 /**
  * 删除未被任何便签（含回收站）引用的附件文件，返回删除数量。
- * 仅文件夹存储支持；云盘同步可能尚未拉全文件，适合延迟 / 手动触发。
+ * 仅文件夹存储支持（能力即类型：getFolderCapable 收窄）；云盘同步可能尚未拉全文件，适合延迟 / 手动触发。
  */
 export async function cleanOrphanAttachments(
   notes: StickyNoteData[],
   trash: StickyNoteData[],
 ): Promise<number> {
-  const storage = getStorage()
-  if (!storage.listAttachments || !storage.deleteAttachment) return 0
+  const storage = getFolderCapable()
+  if (!storage) return 0
   const referenced = new Set<string>()
   for (const n of [...notes, ...trash]) {
     for (const m of n.content.matchAll(ATTACHMENT_REF_RE)) referenced.add(m[1])

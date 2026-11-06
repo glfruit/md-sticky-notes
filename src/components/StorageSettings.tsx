@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { FolderOpen, HardDrive, Cloud, X, BrushCleaning, TriangleAlert, MessageSquarePlus } from 'lucide-react'
-import { isTauri, getFolder, pickFolder, detectSyncRoot, migrateFolderData, syncRootLabel } from '@/lib/storage'
+import { getFolder, getFolderCapable } from '@/lib/storage'
 import { openExternal } from '@/lib/openExternal'
 import { UpdaterSection } from './UpdaterSection'
 
@@ -28,6 +28,8 @@ export function StorageSettings({ onClose, onSwitchFolder, onFlushPending, onCle
     () => localStorage.getItem(PREFILL_KEY) !== '0',
   )
   const folder = getFolder()
+  // 文件夹管理能力（选目录 / 探测 / 迁移）经单点收窄；null = 网页版
+  const capable = getFolderCapable()
 
   const togglePrefill = (on: boolean) => {
     setClipboardPrefill(on)
@@ -36,13 +38,13 @@ export function StorageSettings({ onClose, onSwitchFolder, onFlushPending, onCle
 
   /** 应用切换：flush 旧文件夹 → 托管目录内则自动迁移数据 → 切换并全量重载 */
   const applySwitch = async (path: string, syncRoot: string) => {
-    if (!folder) return
+    if (!folder || !capable) return
     setBusy(true)
     try {
       await onFlushPending()
       let migrated = ''
       if (syncRoot) {
-        const [notes, trash, atts] = await migrateFolderData(folder, path)
+        const [notes, trash, atts] = await capable.migrateFolderData(folder, path)
         const parts = [
           notes > 0 ? `${notes} 个便签` : '',
           trash > 0 ? `${trash} 个回收站便签` : '',
@@ -54,7 +56,7 @@ export function StorageSettings({ onClose, onSwitchFolder, onFlushPending, onCle
       setPending(null)
       setSwitchResult(
         syncRoot
-          ? `已切换到${syncRootLabel(syncRoot)}同步目录${migrated ? `，${migrated}` : '（新文件夹为空，无需迁移）'}`
+          ? `已切换到${capable.syncRootLabel(syncRoot)}同步目录${migrated ? `，${migrated}` : '（新文件夹为空，无需迁移）'}`
           : '已切换。注意：该文件夹不在云盘同步目录内，多机同步不会生效',
       )
     } catch (e) {
@@ -65,16 +67,17 @@ export function StorageSettings({ onClose, onSwitchFolder, onFlushPending, onCle
   }
 
   const changeFolder = async () => {
+    if (!capable) return
     setSwitchResult(null)
     setBusy(true)
     try {
-      const picked = await pickFolder()
+      const picked = await capable.pickFolder()
       if (!picked) return
       if (picked === folder) {
         setSwitchResult('选择的文件夹与当前相同')
         return
       }
-      const syncRoot = await detectSyncRoot(picked)
+      const syncRoot = await capable.detectSyncRoot(picked)
       if (syncRoot) {
         // 受管的云盘同步目录：按用户选择自动完成数据迁移
         await applySwitch(picked, syncRoot)
@@ -114,7 +117,7 @@ export function StorageSettings({ onClose, onSwitchFolder, onFlushPending, onCle
           </button>
         </div>
 
-        {isTauri() ? (
+        {capable ? (
           <>
             <div className="text-[12px] text-black/50 mb-1.5">便签保存为 Markdown 文件，存放在：</div>
             <div className="flex items-center gap-2 rounded-lg bg-black/5 px-2.5 py-2">
