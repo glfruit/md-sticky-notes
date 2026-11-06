@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Smile, Eraser, Table, Archive } from 'lucide-react'
 import { EmojiPicker } from './EmojiPicker'
 
@@ -26,6 +26,16 @@ interface Props {
 export function FormatBar({ barColor, onColor, onClearColor, onEmoji, onTable, onArchive }: Props) {
   const [open, setOpen] = useState<'color' | 'emoji' | 'table' | null>(null)
   const [grid, setGrid] = useState({ r: 3, c: 3 })
+
+  // 弹出打开时 Esc 关闭（与其余菜单语义对齐；焦点在 textarea 上，须 window 级监听）
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(null)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open])
 
   const btn = 'flex items-center gap-1 px-1.5 h-5 rounded text-[11px] text-black/55 hover:bg-black/10 hover:text-black/80 transition-colors'
 
