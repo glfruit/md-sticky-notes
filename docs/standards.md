@@ -21,6 +21,7 @@
 ## 存储与同步
 
 - **磁盘布局契约单源**：便签文件名 `<safe-id>.md`（safe = 路径分隔符换下划线）单源在 Rust `note_path` + `sanitize_name`（`src-tauri/src/lib.rs`，`list_notes` 反向提取依赖同一契约）；目录 `.trash/`、`attachments/` 单源在 Rust `TRASH_DIR` / `ATTACHMENTS_DIR`，前端 `folderAdapter` 只手拼 `.trash`（`trashFolder()`）一处。改文件名或目录规则两侧同步改，契约测试 `note_path_stays_inside_folder`。
+- **FolderCapable 能力即类型**：桌面管理能力（选目录 / 同步盘探测 / 数据迁移 / 附件管理 / 外部变更订阅）只定义在 `FolderCapable`（folderAdapter 实现），消费方经 `getFolderCapable()` 单点收窄——不写 `kind === 'folder'` 判断、不做 optional 方法探测；运行时探测 `isTauri()`（更新 / 通知 / 外链 / 关窗 / 全局快捷键）问的是「跑在 Tauri 里吗」，与存储无关，不进存储 seam。
 - **`updatedAt` 是合并仲裁**：reload 合并时本地不旧于磁盘就以本地为准（600ms 防抖窗口内磁盘可能是旧版，无条件采磁盘会回滚用户刚做的操作）。
 - 切换同步文件夹前必须先 `flushPendingSaves`；迁移复制对目标已存在文件跳过不覆盖。
 - 附件存同步文件夹 `attachments/` 子目录，迁移/清理逻辑都要把它算进去。
