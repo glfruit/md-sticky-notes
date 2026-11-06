@@ -44,20 +44,26 @@ describe('folderAdapter 核心读写契约（fake Invoke）', () => {
     ])
   })
 
-  it('trashNote 两步：先写 .trash 再删主目录（trashFolder 单源路径）', async () => {
+  it('trashNote 单命令原子换位：move_note 主目录 → .trash（#31，替换原 write+delete 两步）', async () => {
     const { invoke, calls } = makeInvoke()
     await makeFolderAdapter(F, invoke).trashNote(note)
-    expect(calls.map((c) => c.cmd)).toEqual(['write_note', 'delete_note'])
-    expect(calls[0].args).toMatchObject({ folder: `${F}/.trash`, id: note.id })
-    expect(calls[1].args).toMatchObject({ folder: F, id: note.id })
+    expect(calls).toEqual([
+      {
+        cmd: 'move_note',
+        args: { fromFolder: F, toFolder: `${F}/.trash`, id: note.id, text: serializeNote(note) },
+      },
+    ])
   })
 
-  it('restoreTrash 对称反向：先写主目录再删 .trash', async () => {
+  it('restoreTrash 对称反向：move_note .trash → 主目录', async () => {
     const { invoke, calls } = makeInvoke()
     await makeFolderAdapter(F, invoke).restoreTrash(note)
-    expect(calls.map((c) => c.cmd)).toEqual(['write_note', 'delete_note'])
-    expect(calls[0].args).toMatchObject({ folder: F, id: note.id })
-    expect(calls[1].args).toMatchObject({ folder: `${F}/.trash`, id: note.id })
+    expect(calls).toEqual([
+      {
+        cmd: 'move_note',
+        args: { fromFolder: `${F}/.trash`, toFolder: F, id: note.id, text: serializeNote(note) },
+      },
+    ])
   })
 
   it('listTrash 解析 [id, text] 对；失败（回收站目录尚不存在）返回空', async () => {
