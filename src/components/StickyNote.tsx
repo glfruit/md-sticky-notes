@@ -330,7 +330,11 @@ export const StickyNote = memo(function StickyNote({
           {/* 指定分类（#41）：Tag 图标，有分类时高亮琥珀 */}
           <div className="relative">
             <button
-              className={`${iconBtn} ${note.category ? 'text-amber-600' : ''}`}
+              className={
+                note.category
+                  ? 'p-1 rounded hover:bg-stone-900/8 text-amber-600 hover:text-amber-700 transition-colors'
+                  : iconBtn
+              }
               onClick={() => setCategoryOpen((v) => !v)}
               title={note.category ? `分类：${note.category}（点击更改）` : '设置分类'}
             >
