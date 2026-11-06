@@ -185,6 +185,29 @@ fn delete_note(folder: String, id: String) -> Result<(), String> {
     Ok(())
 }
 
+/// 回收站移入/恢复的原子换位（#31）：fs::rename 一步完成「写目标 + 删源」，
+/// 消除两步 invoke 之间崩溃导致的便签两处并存（同步文件夹下中间态会被云盘扩散）。
+/// rename 成功后 atomic_write 更新内容（updatedAt / z 与操作时刻一致）；此间崩溃
+/// 则文件已在目标位置、内容为旧版——位置一致优先，不产生两处并存。
+/// 目标已存在时 rename 直接覆盖（Unix 语义；Windows 侧 std 走 MoveFileExW 带
+/// REPLACE_EXISTING 同样覆盖）——重复移入/恢复幂等。
+/// 源不存在时退化为直写目标（云盘/他机已移走源时不阻断回收站路径，行为同旧版 write）。
+#[tauri::command]
+fn move_note(
+    from_folder: String,
+    to_folder: String,
+    id: String,
+    text: String,
+) -> Result<(), String> {
+    let src = note_path(&from_folder, &id);
+    let dst = note_path(&to_folder, &id);
+    fs::create_dir_all(&to_folder).map_err(|e| e.to_string())?;
+    if src.exists() {
+        fs::rename(&src, &dst).map_err(|e| e.to_string())?;
+    }
+    atomic_write(&dst, text.as_bytes())
+}
+
 #[tauri::command]
 fn write_attachment(folder: String, name: String, data_b64: String) -> Result<(), String> {
     use base64::Engine;
@@ -379,6 +402,7 @@ pub fn run() {
             list_notes,
             write_note,
             delete_note,
+            move_note,
             write_attachment,
             read_attachment,
             list_attachments,
@@ -449,6 +473,41 @@ mod tests {
         assert_eq!(sanitize_name("a/b\\c"), "a_b_c");
         assert_eq!(sanitize_name("../evil"), ".._evil");
         assert_eq!(sanitize_name("note-abc123"), "note-abc123");
+    }
+
+    #[test]
+    fn move_note_swaps_atomically_and_updates_content() {
+        let base = std::env::temp_dir().join(format!("mdsn-move-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&base);
+        let (a, b) = (base.join("a"), base.join("b"));
+        fs::create_dir_all(&a).unwrap();
+        fs::write(a.join("n1.md"), "old").unwrap();
+        let mv = |from: &Path, to: &Path, id: &str, text: &str| {
+            move_note(
+                from.to_string_lossy().into_owned(),
+                to.to_string_lossy().into_owned(),
+                id.to_string(),
+                text.to_string(),
+            )
+        };
+        // 正常：换位 + 内容更新（目标目录不存在则内建）
+        mv(&a, &b, "n1", "new").unwrap();
+        assert!(!a.join("n1.md").exists());
+        assert_eq!(fs::read_to_string(b.join("n1.md")).unwrap(), "new");
+        // 源缺失退化：直写目标（云盘/他机已移走源不阻断回收站路径）
+        mv(&a, &b, "n2", "fresh").unwrap();
+        assert_eq!(fs::read_to_string(b.join("n2.md")).unwrap(), "fresh");
+        // 目标已存在：覆盖（重复移入回收站幂等）
+        fs::write(a.join("n3.md"), "src").unwrap();
+        fs::write(b.join("n3.md"), "dst-old").unwrap();
+        mv(&a, &b, "n3", "dst-new").unwrap();
+        assert!(!a.join("n3.md").exists());
+        assert_eq!(fs::read_to_string(b.join("n3.md")).unwrap(), "dst-new");
+        // 源缺失且目标已存在：退化为 atomic_write 覆盖（.trash 已有副本时再次删除）
+        fs::write(b.join("n4.md"), "stale").unwrap();
+        mv(&a, &b, "n4", "again").unwrap();
+        assert_eq!(fs::read_to_string(b.join("n4.md")).unwrap(), "again");
+        let _ = fs::remove_dir_all(&base);
     }
 
     #[test]
