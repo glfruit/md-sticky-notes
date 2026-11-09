@@ -6,7 +6,7 @@ import { formatUpdatedAt } from '@/lib/datetime'
 import { deriveTitle } from '@/lib/note'
 import { exportNote } from '@/lib/export'
 import { cleanupMarkdown } from '@/lib/editor'
-import { setTaskAtIndex, archiveCompletedTasks, convertListItemToTask, convertTaskToListItem, extractTasks, taskProgress, TASK_STATUS_META } from '@/lib/taskLines'
+import { setTaskAtIndex, setTaskPriority, archiveCompletedTasks, convertListItemToTask, convertTaskToListItem, extractTasks, taskProgress, TASK_STATUS_META, PRIORITY_META, type PriorityMark } from '@/lib/taskLines'
 import type { TaskStatus } from '@/lib/taskLines'
 import type { NoteGeometry } from '@/lib/layout'
 import { useNoteEditor } from '@/hooks/useNoteEditor'
@@ -106,6 +106,15 @@ export const StickyNote = memo(function StickyNote({
     [note.id, note.content, onUpdate],
   )
 
+  // 优先级 emoji 设置（#47）：与 setTaskStatus 同款薄包装，null = 剥除
+  const setTaskPriorityAt = useCallback(
+    (index: number, priority: PriorityMark | null) => {
+      const next = setTaskPriority(note.content, index, priority)
+      if (next !== null) onUpdate(note.id, { content: next })
+    },
+    [note.id, note.content, onUpdate],
+  )
+
   const convertToTask = useCallback(
     (listIndex: number) => {
       const next = convertListItemToTask(note.content, listIndex)
@@ -197,11 +206,13 @@ export const StickyNote = memo(function StickyNote({
 
   const iconBtn = 'p-1 rounded hover:bg-stone-900/8 text-stone-500 hover:text-stone-800 transition-colors'
 
-  // 状态菜单对应的任务当前状态（菜单里打勾标示）
-  const ctxTaskStatus =
+  // 状态菜单对应的任务当前状态 / 优先级（菜单里打勾标示）
+  const ctxTask =
     ctxMenu?.kind === 'status'
-      ? extractTasks(note.content).find((t) => t.index === ctxMenu.index)?.status
+      ? extractTasks(note.content).find((t) => t.index === ctxMenu.index)
       : undefined
+  const ctxTaskStatus = ctxTask?.status
+  const ctxTaskPriority = ctxTask?.priority
 
   return (
     <div
@@ -516,6 +527,33 @@ export const StickyNote = memo(function StickyNote({
                       {s === ctxTaskStatus && <Check size={12} className="ml-auto text-black/45" />}
                     </MenuItem>
                   ))}
+                  <MenuDivider />
+                  <div className="px-2.5 py-1 text-[10px] text-black/40">优先级</div>
+                  {PRIORITY_META.map((p) => (
+                    <MenuItem
+                      key={p.mark}
+                      icon={<span className="text-[12px] leading-none w-3.5 text-center shrink-0">{p.mark}</span>}
+                      onClick={() => {
+                        setTaskPriorityAt(ctxMenu.index, p.mark)
+                        closeCtxMenu()
+                      }}
+                    >
+                      {p.label}
+                      {ctxTaskPriority === p.mark && (
+                        <Check size={12} className="ml-auto text-black/45" />
+                      )}
+                    </MenuItem>
+                  ))}
+                  <MenuItem
+                    muted
+                    icon={<span className="text-[10px] leading-none w-3.5 text-center shrink-0 text-black/30">—</span>}
+                    onClick={() => {
+                      setTaskPriorityAt(ctxMenu.index, null)
+                      closeCtxMenu()
+                    }}
+                  >
+                    无优先级
+                  </MenuItem>
                   <MenuDivider />
                   <MenuItem
                     muted
