@@ -41,6 +41,50 @@ export const TASK_STATUS_META: Record<TaskStatus, { label: string; color: string
   cancelled: { label: '废弃', color: '#A8A29E' },
 }
 
+// ---------- 优先级 emoji（#47：🔥/⚡/🐢 内联任务文本，速度叙事图标组） ----------
+
+/** 优先级标记（单一事实）：菜单 / 解析 / 排序共用；序即高→低 */
+export const PRIORITY_MARKS = ['🔥', '⚡', '🐢'] as const
+export type PriorityMark = (typeof PRIORITY_MARKS)[number]
+
+/** 优先级菜单项（保序：高 → 中 → 低），▾ 状态菜单的「优先级」分组消费 */
+export const PRIORITY_META: ReadonlyArray<{ mark: PriorityMark; label: string }> = [
+  { mark: '🔥', label: '高' },
+  { mark: '⚡', label: '中' },
+  { mark: '🐢', label: '低' },
+]
+
+/** 任务文本前缀「可选空白 + 优先级 emoji + 空白」的识别与剥除共用
+ *  （由 PRIORITY_MARKS 构造，改集合只动常量一处——同 TASK_LINE_RE 由 TASK_MARK_CHARS 构造先例） */
+const PRIORITY_PREFIX_RE = new RegExp(`^\\s*(?:${PRIORITY_MARKS.join('|')})\\s*`)
+
+/** 任务文本前缀的优先级 emoji；无则 null */
+export function extractPriority(text: string): PriorityMark | null {
+  const m = text.match(PRIORITY_PREFIX_RE)
+  const mark = m?.[0]?.trim()
+  return (PRIORITY_MARKS as readonly string[]).includes(mark ?? '') ? (mark as PriorityMark) : null
+}
+
+/** 优先级排序权重（🔥2 ⚡1 🐢0，无/未知 -1）——groupTasks 组内次序用 */
+export function priorityWeight(mark?: string | null): number {
+  const i = PRIORITY_MARKS.indexOf(mark as PriorityMark)
+  return i === -1 ? -1 : PRIORITY_MARKS.length - 1 - i
+}
+
+/** 把源码中第 index 个任务设置 / 清除优先级 emoji（接口对齐 setTaskAtIndex）。
+ *  emoji 内联在任务文本最前（`- [ ] 🔥 写周报`）：置 = 原位替换旧档，null = 剥除。 */
+export function setTaskPriority(
+  content: string,
+  index: number,
+  priority: PriorityMark | null,
+): string | null {
+  const row = scanListLines(content).tasks[index]
+  if (!row) return null
+  const stripped = row.after.replace(PRIORITY_PREFIX_RE, '').replace(/^\s+/, '')
+  const after = priority === null ? ` ${stripped}` : ` ${priority} ${stripped}`
+  return rewriteLine(content, row.lineNo, `${row.head}${row.mark}]${after.replace(/\s+$/, '')}`)
+}
+
 // ---------- 行集扫描（唯一扫描入口） ----------
 
 /** 任意列表项行（无序 / 有序 / 任务） */
@@ -186,13 +230,21 @@ export interface TaskEntry {
   index: number
   /** 截止日期 YYYY-MM-DD（从任务文本提取，无则 undefined） */
   due?: string
+  /** 优先级 emoji（任务文本前缀的 🔥/⚡/🐢，无则 undefined；text 仍含原文） */
+  priority?: PriorityMark
 }
 
 /** 提取便签中的所有任务（含状态与文本，跳过代码块内部） */
 export function extractTasks(content: string): TaskEntry[] {
   return scanListLines(content).tasks.map((row, index) => {
     const text = row.after.trim()
-    return { status: row.status, text, index, due: extractDueDate(text) ?? undefined }
+    return {
+      status: row.status,
+      text,
+      index,
+      due: extractDueDate(text) ?? undefined,
+      priority: extractPriority(text) ?? undefined,
+    }
   })
 }
 

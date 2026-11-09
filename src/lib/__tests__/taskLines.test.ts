@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import {
   setTaskAtIndex,
+  setTaskPriority,
+  extractPriority,
+  priorityWeight,
   cycleTaskAtIndex,
   parseRecurrence,
   nextOccurrence,
@@ -212,5 +215,47 @@ describe('listLineCounts 行集计数（decorateTasks 盖章校验的依据）',
 
   it('无列表内容为零', () => {
     expect(listLineCounts('普通文本\n# 标题')).toEqual({ tasks: 0, listItems: 0 })
+  })
+})
+
+describe('任务优先级 emoji（#47）', () => {
+  it('extractPriority：前缀识别（含可选空白），非前缀 / 无则 null', () => {
+    expect(extractPriority(' 🔥 写周报')).toBe('🔥')
+    expect(extractPriority('⚡冲刺')).toBe('⚡')
+    expect(extractPriority('写 🐢 周报')).toBeNull() // 不在前缀不算
+    expect(extractPriority('普通任务')).toBeNull()
+  })
+
+  it('priorityWeight：🔥2 ⚡1 🐢0 无 −1', () => {
+    expect(priorityWeight('🔥')).toBeGreaterThan(priorityWeight('⚡'))
+    expect(priorityWeight('⚡')).toBeGreaterThan(priorityWeight('🐢'))
+    expect(priorityWeight('🐢')).toBeGreaterThan(priorityWeight(undefined))
+    expect(priorityWeight('未知')).toBe(-1)
+  })
+
+  it('setTaskPriority：置 / 原位换 / 清除', () => {
+    // 置：插在行首标记后，单空格分隔
+    expect(setTaskPriority('- [ ] 写周报', 0, '🔥')).toBe('- [ ] 🔥 写周报')
+    // 换：原位替换旧档，文本不动
+    expect(setTaskPriority('- [ ] 🔥 写周报', 0, '🐢')).toBe('- [ ] 🐢 写周报')
+    // 清除：剥除 emoji 与多余空白
+    expect(setTaskPriority('- [ ] 🔥 写周报', 0, null)).toBe('- [ ] 写周报')
+    // 置于空文本任务
+    expect(setTaskPriority('- [ ] ', 0, '⚡')).toBe('- [ ] ⚡')
+    // 越界 null
+    expect(setTaskPriority('- [ ] 任务', 3, '🔥')).toBeNull()
+  })
+
+  it('extractTasks 附带 priority；与状态/日期解析共存', () => {
+    const tasks = extractTasks('- [ ] 🔥 2026-11-09 交稿\n- [ ] 普通')
+    expect(tasks[0]?.priority).toBe('🔥')
+    expect(tasks[0]?.due).toBe('2026-11-09')
+    expect(tasks[1]?.priority).toBeUndefined()
+  })
+
+  it('重复任务标记完成：优先级 emoji 随文本保留', () => {
+    const now = new Date(2026, 10, 9, 12, 0)
+    const next = setTaskAtIndex('- [x] 🔥 🔁每天 喝水', 0, 'done', now)
+    expect(next).toBe('- [ ] 🔥 2026-11-10 🔁每天 喝水')
   })
 })
