@@ -59,3 +59,45 @@ describe('groupTasks 侧栏任务分组', () => {
     expect(TASK_GROUP_META.todo.label).toBe('待办')
   })
 })
+
+describe('组内优先级排序（#47：同截止或都无日期时 🔥 前）', () => {
+  const now = new Date(2026, 10, 9)
+  const row = (i: number, task: { status: 'todo'; due?: string; priority?: string }) => ({
+    task,
+    note: { updatedAt: 1000 - i },
+  })
+
+  it('同截止日期：优先级高的在前', () => {
+    const groups = groupTasks(
+      [
+        row(0, { status: 'todo', due: '2026-11-10', priority: undefined }),
+        row(1, { status: 'todo', due: '2026-11-10', priority: '🔥' }),
+        row(2, { status: 'todo', due: '2026-11-10', priority: '⚡' }),
+      ],
+      now,
+    )
+    expect(groups[0]?.rows.map((r) => r.task.priority)).toEqual(['🔥', '⚡', undefined])
+  })
+
+  it('都无截止：优先级先于 updatedAt', () => {
+    const groups = groupTasks(
+      [
+        row(0, { status: 'todo', priority: undefined }), // updatedAt 最新（1000）
+        row(1, { status: 'todo', priority: '🐢' }), // updatedAt 999
+      ],
+      now,
+    )
+    expect(groups[0]?.rows.map((r) => r.task.priority)).toEqual(['🐢', undefined])
+  })
+
+  it('截止不同：日期仍最优先（🐢 带日期仍在 🔥 无日期前）', () => {
+    const groups = groupTasks(
+      [
+        row(0, { status: 'todo', priority: '🔥' }),
+        row(1, { status: 'todo', due: '2026-11-20', priority: '🐢' }), // 远期 due：不落快过期组
+      ],
+      now,
+    )
+    expect(groups[0]?.rows.map((r) => r.task.priority)).toEqual(['🐢', '🔥'])
+  })
+})
