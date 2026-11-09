@@ -55,6 +55,8 @@ const ATTACHMENT_REF_RE = /attachment:\/\/([^\s)]+)/g
 /**
  * 删除未被任何便签（含回收站）引用的附件文件，返回删除数量。
  * 仅文件夹存储支持（能力即类型：getFolderCapable 收窄）；云盘同步可能尚未拉全文件，适合延迟 / 手动触发。
+ * 空清单防护（#44）：notes 与 trash 都为空视为「加载异常的假象」而非「确实无引用」，
+ * 直接返回 0——否则一次读取故障（如 TCC 授权失效）会把附件全部当孤儿误删。
  */
 export async function cleanOrphanAttachments(
   notes: StickyNoteData[],
@@ -62,6 +64,7 @@ export async function cleanOrphanAttachments(
 ): Promise<number> {
   const capable = getFolderCapable()
   if (!capable) return 0
+  if (notes.length === 0 && trash.length === 0) return 0
   const referenced = new Set<string>()
   for (const n of [...notes, ...trash]) {
     for (const m of n.content.matchAll(ATTACHMENT_REF_RE)) referenced.add(m[1])
