@@ -59,3 +59,32 @@ export function filterByCategory<T extends { category?: string }>(notes: T[], se
   if (selected === '') return notes.filter((n) => !n.category)
   return notes.filter((n) => n.category === selected)
 }
+
+/** 筛选下拉的一个选项（FilterMenuButton 消费；key 为 null = 全部，'' = 无分类哨兵） */
+export interface FilterOptionData {
+  key: string | null
+  label: string
+  count: number
+}
+
+/** 分类筛选下拉的选项清单（#49，Sidebar 消费，可直测）：
+ *  全部（带计数）/ 无分类（仅当分布非 0）/ 各分类（分布非 0）；末位守卫——
+ *  选中分类被另一维筛走全部便签时保留 count=0 项（#41 卡死态教训：按钮须能显示当前值，
+ *  否则过滤仍生效而按钮回基态 = 隐身筛选）。 */
+export function categoryFilterOptions(
+  notes: { category?: string }[],
+  categories: string[],
+  selected: string | null,
+): FilterOptionData[] {
+  const items: FilterOptionData[] = [{ key: null, label: '全部', count: notes.length }]
+  const noneCount = notes.filter((n) => !n.category).length
+  if (noneCount > 0) items.push({ key: '', label: '无分类', count: noneCount })
+  for (const c of categories) {
+    const count = notes.filter((n) => n.category === c).length
+    if (count > 0) items.push({ key: c, label: c, count })
+  }
+  if (selected !== null && !items.some((o) => o.key === selected)) {
+    items.push({ key: selected, label: selected || '无分类', count: 0 })
+  }
+  return items
+}
