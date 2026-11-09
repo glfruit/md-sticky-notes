@@ -32,6 +32,9 @@ export function useNotes() {
   const [notes, setNotes] = useState<StickyNoteData[]>([])
   const [trash, setTrash] = useState<StickyNoteData[]>([])
   const [loaded, setLoaded] = useState(false)
+  /** 初始加载失败（如 TCC 授权失效读不了同步文件夹，#44）：非 null 时 App 显示
+   *  错误提示卡与放行指引，而不是静默空白「没有便签了」（用户会以为数据丢了） */
+  const [loadError, setLoadError] = useState<string | null>(null)
   const zTop = useRef(1)
   // state 的同步镜像：让各操作在 updater 外读取最新值、把副作用收敛到一处
   const notesRef = useRef<StickyNoteData[]>([])
@@ -48,27 +51,38 @@ export function useNotes() {
     setTrash(next)
   }, [])
 
-  // 初始加载（网页版读 localStorage；桌面版读同步文件夹）
+  // 初始加载（网页版读 localStorage；桌面版读同步文件夹）。
+  // loadNotes/listTrash 失败（权限 / 目录不可读）不中断加载：出错误态而非卡空白
   useEffect(() => {
     let cancelled = false
     void (async () => {
-      await initStorage()
-      let ns = (await getStorage().loadNotes()).map(clampIntoScrollArea)
-      if (cancelled) return
-      if (ns.length === 0 && !localStorage.getItem(SEED_KEY)) {
-        ns = seedNotes()
-        localStorage.setItem(SEED_KEY, '1')
-        for (const n of ns) void getStorage().saveNote(n)
+      try {
+        await initStorage()
+        let ns = (await getStorage().loadNotes()).map(clampIntoScrollArea)
+        if (cancelled) return
+        if (ns.length === 0 && !localStorage.getItem(SEED_KEY)) {
+          ns = seedNotes()
+          localStorage.setItem(SEED_KEY, '1')
+          for (const n of ns) void getStorage().saveNote(n)
+        }
+        zTop.current = nextZTop(ns)
+        applyNotes(ns)
+        // 回收站：加载并清理 30 天前的条目
+        const trashed = await getStorage().listTrash()
+        if (cancelled) return
+        const { kept, expired } = partitionTrash(trashed)
+        for (const old of expired) void getStorage().deleteTrash(old.id)
+        applyTrash(kept)
+        setLoadError(null)
+        setLoaded(true)
+      } catch (e) {
+        // 最典型：桌面版同步文件夹被 macOS TCC 拦（ad-hoc 签名每次更新身份都变）
+        console.warn('[notes] 便签加载失败：', e)
+        if (!cancelled) {
+          setLoadError(String(e instanceof Error ? e.message : e))
+          setLoaded(true)
+        }
       }
-      zTop.current = nextZTop(ns)
-      applyNotes(ns)
-      // 回收站：加载并清理 30 天前的条目
-      const trashed = await getStorage().listTrash()
-      if (cancelled) return
-      const { kept, expired } = partitionTrash(trashed)
-      for (const old of expired) void getStorage().deleteTrash(old.id)
-      applyTrash(kept)
-      setLoaded(true)
     })()
     return () => {
       cancelled = true
@@ -211,26 +225,36 @@ export function useNotes() {
 
   // 从存储层重载。
   // merge 模式（聚焦 / 文件夹变更通知）：正在编辑的便签以本地为准，避免打断输入；
-  // replace 模式（切换文件夹）：先 flush 旧文件夹，再全量替换，避免旧便签漏进新文件夹
+  // replace 模式（切换文件夹）：先 flush 旧文件夹，再全量替换，避免旧便签漏进新文件夹。
+  // 重载失败静默 warn：屏上还有旧数据可看；replace 失败（如新目录无权限）出错误态
   const reload = useCallback(
     async (replace = false) => {
-      if (replace) await flushPendingSaves()
-      const fresh = (await getStorage().loadNotes()).map(clampIntoScrollArea)
-      if (replace) {
-        zTop.current = nextZTop(fresh)
-        applyNotes(fresh)
-        const trashed = await getStorage().listTrash()
-        // 与全量加载一致：过期回收项一并彻底删除（原先 replace 只过滤不删）
-        const { kept, expired } = partitionTrash(trashed)
-        for (const old of expired) void getStorage().deleteTrash(old.id)
-        applyTrash(kept)
-        return
+      try {
+        if (replace) await flushPendingSaves()
+        const fresh = (await getStorage().loadNotes()).map(clampIntoScrollArea)
+        if (replace) {
+          zTop.current = nextZTop(fresh)
+          applyNotes(fresh)
+          const trashed = await getStorage().listTrash()
+          // 与全量加载一致：过期回收项一并彻底删除（原先 replace 只过滤不删）
+          const { kept, expired } = partitionTrash(trashed)
+          for (const old of expired) void getStorage().deleteTrash(old.id)
+          applyTrash(kept)
+          setLoadError(null)
+          return
+        }
+        const cur = notesRef.current
+        const merged = mergeNotes(cur, fresh)
+        zTop.current = Math.max(zTop.current, nextZTop(merged))
+        // mergeNotes 无变化返回 cur 原引用：引用相等就不重渲染（自己的写入也会触发监听事件）
+        if (merged !== cur) applyNotes(merged)
+        // merge 成功同样要清错误态（评审发现）：否则授权恢复后 focus 自动 reload 拉回了
+        // 便签，但错误卡残留且全屏拦截点击——「重试」走的就是 merge 模式，不清即锁死
+        setLoadError(null)
+      } catch (e) {
+        console.warn('[notes] 重载失败（沿用屏上数据）：', e)
+        if (replace) setLoadError(String(e instanceof Error ? e.message : e))
       }
-      const cur = notesRef.current
-      const merged = mergeNotes(cur, fresh)
-      zTop.current = Math.max(zTop.current, nextZTop(merged))
-      // mergeNotes 无变化返回 cur 原引用：引用相等就不重渲染（自己的写入也会触发监听事件）
-      if (merged !== cur) applyNotes(merged)
     },
     [applyNotes, applyTrash, flushPendingSaves],
   )
@@ -279,12 +303,13 @@ export function useNotes() {
     }
   }, [loaded, reload])
 
-  // 文件夹存储：启动 15 秒后清理孤儿附件（等云盘同步先拉全文件）
+  // 文件夹存储：启动 15 秒后清理孤儿附件（等云盘同步先拉全文件）。
+  // 加载失败时禁止清理（#44）：notes/trash 均空的「全孤儿」假象会把附件全部误删
   useEffect(() => {
-    if (!loaded || !getFolderCapable()) return
+    if (!loaded || loadError !== null || !getFolderCapable()) return
     const t = window.setTimeout(() => void cleanAttachments(), 15_000)
     return () => window.clearTimeout(t)
-  }, [loaded, cleanAttachments])
+  }, [loaded, loadError, cleanAttachments])
 
   // 退出前把防抖中的内容立即落盘：
   // - pagehide / visibilitychange 兜底（尽力而为，无法等待完成）
@@ -320,6 +345,8 @@ export function useNotes() {
     notes,
     trash,
     loaded,
+    /** 非 null = 初始加载 / 换目录失败（App 据此显示错误提示卡与指引） */
+    loadError,
     addNote,
     updateNote,
     deleteNote,

@@ -11,7 +11,7 @@ import { Sidebar } from '@/components/Sidebar'
 import { StorageSettings } from '@/components/StorageSettings'
 import { UpdateBanner } from '@/components/UpdateBanner'
 import { useReminders } from '@/hooks/useReminders'
-import { isTauri } from '@/lib/storage'
+import { isTauri, getFolder } from '@/lib/storage'
 import { exportAllNotes } from '@/lib/export'
 import { extractTasks, dueUrgency } from '@/lib/taskLines'
 import { collectCategories, filterByCategory } from '@/lib/note'
@@ -30,7 +30,7 @@ const PIN_KEY = 'md-sticky-notes:sidebar-pinned'
 const CATEGORY_KEY = 'md-sticky-notes:category-filter'
 
 export default function App() {
-  const { notes, trash, addNote, updateNote, deleteNote, bringToFront, switchFolder, cleanAttachments, flushPendingSaves, restoreTrashNote, permanentlyDeleteTrash } = useNotes()
+  const { notes, trash, loadError, reload, addNote, updateNote, deleteNote, bringToFront, switchFolder, cleanAttachments, flushPendingSaves, restoreTrashNote, permanentlyDeleteTrash } = useNotes()
   const scrollRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLDivElement>(null)
   const [searchOpen, setSearchOpen] = useState(false)
@@ -286,7 +286,36 @@ export default function App() {
         </div>
       </div>
 
-      {notes.length === 0 && (
+      {loadError !== null && (
+        /* 同步文件夹读取失败（#44，典型：更新后 TCC 授权失效）：给出路径与放行指引，
+           不再静默空白让用户误以为数据丢了 */
+        <div className="absolute inset-0 flex items-center justify-center">
+          <div className="max-w-md bg-white/95 border border-red-300 shadow-lg backdrop-blur px-5 py-4 rounded-lg text-sm">
+            <div className="font-medium text-red-600 mb-1.5">无法读取同步文件夹</div>
+            <div className="text-stone-600 text-xs break-all mb-2">{getFolder() ?? '（未知路径）'}</div>
+            <div className="text-stone-600 text-xs leading-relaxed mb-3">
+              你的便签文件还在，只是应用暂时读不了这个文件夹。最常见原因：应用更新后 macOS
+              需要重新授权。请到 系统设置 → 隐私与安全性 → 文件与文件夹 → MD Sticky Notes，
+              打开对应云盘文件夹的开关（或先删掉该条目再重开应用，弹出授权时点「允许」），然后回来重试。
+            </div>
+            <div className="flex gap-2">
+              <button
+                className="px-3 py-1.5 rounded-md bg-amber-600 text-white text-xs hover:bg-amber-700 transition-colors"
+                onClick={() => void reload()}
+              >
+                重试
+              </button>
+              <button
+                className="px-3 py-1.5 rounded-md border border-stone-300 text-stone-600 text-xs hover:bg-black/5 transition-colors"
+                onClick={() => setStorageOpen(true)}
+              >
+                更换同步文件夹
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {loadError === null && notes.length === 0 && (
         <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
           <div className="text-stone-600 text-sm bg-white/70 border border-stone-900/10 backdrop-blur px-4 py-2 rounded-lg">
             没有便签了 — 按 ⌥N 或点菜单栏「新建」
