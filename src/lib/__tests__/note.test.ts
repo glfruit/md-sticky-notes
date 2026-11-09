@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { deriveTitle, extractTags, collectCategories, filterByCategory } from '../note'
+import { deriveTitle, extractTags, collectCategories, filterByCategory, categoryFilterOptions } from '../note'
 
 describe('deriveTitle 标题推导', () => {
   it('取第一行非空文本并去 Markdown 标记', () => {
@@ -81,5 +81,31 @@ describe('filterByCategory 分类筛选（#41）', () => {
   it('分类名精确匹配', () => {
     expect(filterByCategory(notes, '工作').map((n) => n.id)).toEqual(['a', 'd'])
     expect(filterByCategory(notes, '不存在')).toEqual([])
+  })
+})
+
+describe('categoryFilterOptions 分类下拉清单（#49）', () => {
+  const notes = [
+    { category: '工作' }, { category: '工作' }, { category: '生活' }, {},
+  ]
+  it('全部 + 无分类（分布非 0）+ 各分类（分布非 0），计数随传入集合联动', () => {
+    expect(categoryFilterOptions(notes, ['工作', '生活'], null)).toEqual([
+      { key: null, label: '全部', count: 4 },
+      { key: '', label: '无分类', count: 1 },
+      { key: '工作', label: '工作', count: 2 },
+      { key: '生活', label: '生活', count: 1 },
+    ])
+    // 另一维筛走后：无分类/空分类项隐藏，计数收窄
+    expect(categoryFilterOptions(notes.slice(0, 2), ['工作', '生活'], null)).toEqual([
+      { key: null, label: '全部', count: 2 },
+      { key: '工作', label: '工作', count: 2 },
+    ])
+  })
+
+  it('选中项被筛走全部便签：保留 count=0 项（#41 卡死态守卫——按钮须能显示当前值）', () => {
+    expect(categoryFilterOptions([], ['生活'], '生活')).toEqual([
+      { key: null, label: '全部', count: 0 },
+      { key: '生活', label: '生活', count: 0 },
+    ])
   })
 })

@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Pin, PinOff, Plus, Trash2 } from 'lucide-react'
+import { Pin, PinOff, Plus, Trash2, StickyNote, ListChecks, FolderOpen, Hash } from 'lucide-react'
+import { FilterMenuButton } from './FilterMenuButton'
 import type { StickyNoteData } from '@/types/note'
 import { NOTE_COLORS } from '@/types/note'
-import { deriveTitle, extractTags, collectCategories, filterByCategory } from '@/lib/note'
+import { deriveTitle, extractTags, collectCategories, filterByCategory, categoryFilterOptions } from '@/lib/note'
 import { formatUpdatedAt } from '@/lib/datetime'
 import { extractTasks, TASK_STATUS_META, dueUrgency, DUE_LEVEL_COLORS } from '@/lib/taskLines'
 import { groupTasks, TASK_GROUP_META } from '@/lib/taskGroups'
@@ -255,22 +256,38 @@ export function Sidebar({
   const sorted = useMemo(() => [...notes].sort((a, b) => b.updatedAt - a.updatedAt), [notes])
   const [tab, setTab] = useState<'notes' | 'tasks' | 'trash'>('notes')
   const [tagFilter, setTagFilter] = useState<string | null>(null)
-  // 标签 → 便签数（用于「便签」页签顶部的筛选 chip 行）
-  const tagCounts = useMemo(() => {
+  const categories = useMemo(() => collectCategories(notes), [notes])
+  // 两维筛选的中间集（对称联动计数的依据，#49）：分类筛选后的集合（标签菜单的基）/
+  // 标签筛选后的集合（分类菜单的基）——各自分布对另一维可见，数字永远与列表一致。
+  // 两处选中项分布为 0 时都保留（#41 卡死态守卫，对称）——否则按钮回基态但过滤仍生效（隐身筛选）
+  const byCategory = useMemo(() => filterByCategory(notes, selectedCategory), [notes, selectedCategory])
+  const byTag = useMemo(
+    () => (tagFilter === null ? sorted : sorted.filter((n) => extractTags(n.content).includes(tagFilter))),
+    [sorted, tagFilter],
+  )
+  const tagOptions = useMemo(() => {
     const counts = new Map<string, number>()
-    for (const n of notes) {
+    for (const n of byCategory) {
       for (const t of extractTags(n.content)) counts.set(t, (counts.get(t) ?? 0) + 1)
     }
-    return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-  }, [notes])
-  const categories = useMemo(() => collectCategories(notes), [notes])
-  // 列表过滤 = 分类（App 属主，画布同源）∩ 标签（侧栏内部态）
-  const visibleNotes = useMemo(() => {
-    const byCategory = filterByCategory(sorted, selectedCategory)
-    return tagFilter === null
-      ? byCategory
-      : byCategory.filter((n) => extractTags(n.content).includes(tagFilter))
-  }, [sorted, selectedCategory, tagFilter])
+    const items = [...counts.entries()]
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .map(([tag, count]) => ({ key: tag, label: `#${tag}`, count }))
+    if (tagFilter !== null && !counts.has(tagFilter)) {
+      items.push({ key: tagFilter, label: `#${tagFilter}`, count: 0 })
+    }
+    return [{ key: null, label: '全部', count: byCategory.length }, ...items]
+  }, [byCategory, tagFilter])
+  const categoryOptions = useMemo(
+    () => categoryFilterOptions(byTag, categories, selectedCategory),
+    [byTag, categories, selectedCategory],
+  )
+  // 列表过滤 = 分类（App 属主，画布同源）∩ 标签（侧栏内部态）；byTag 已按标签筛过，
+  // 再过分类即交集（评审修正：与 byTag 单遍派生，消同形双算）
+  const visibleNotes = useMemo(
+    () => filterByCategory(byTag, selectedCategory),
+    [byTag, selectedCategory],
+  )
   const openTaskCount = useMemo(
     () =>
       notes.reduce(
@@ -284,8 +301,11 @@ export function Sidebar({
     [notes],
   )
 
+  // 页签计数 >99 显「99+」：三页签 + 图标在 232px 侧栏内空间紧，三位数必溢出（评审实测）
+  const fmtCount = (n: number) => (n > 99 ? '99+' : String(n))
+
   const tabBtn = (active: boolean) =>
-    `px-2 py-0.5 rounded-full text-[11px] whitespace-nowrap shrink-0 transition-colors ${
+    `px-1.5 py-0.5 rounded-full text-[11px] whitespace-nowrap shrink-0 transition-colors ${
       active ? 'bg-amber-500/15 font-semibold text-amber-700' : 'text-stone-500 hover:bg-stone-900/5'
     }`
 
@@ -295,17 +315,23 @@ export function Sidebar({
       style={{ transform: visible ? 'translateX(0)' : 'translateX(-100%)' }}
       onPointerLeave={onHoverLeave}
     >
-      <div className="flex items-center gap-1 px-3 h-9 border-b border-stone-900/10 shrink-0">
+      <div className="flex items-center px-3 h-9 border-b border-stone-900/10 shrink-0">
+        {/* 页签区：正常一排放下；极端计数（99+ 压顶）下允许横向滚动兜底，右侧操作按钮恒可达 */}
+        <div className="flex items-center gap-0.5 min-w-0 flex-1 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
         <button className={tabBtn(tab === 'notes')} onClick={() => setTab('notes')}>
-          便签 {notes.length}
+          <StickyNote size={11} className="mr-0.5 inline-block align-[-1px]" />
+          便签 {fmtCount(notes.length)}
         </button>
         <button className={tabBtn(tab === 'tasks')} onClick={() => setTab('tasks')}>
-          任务 {openTaskCount}
+          <ListChecks size={11} className="mr-0.5 inline-block align-[-1px]" />
+          任务 {fmtCount(openTaskCount)}
         </button>
         <button className={tabBtn(tab === 'trash')} onClick={() => setTab('trash')}>
-          回收 {trash.length}
+          <Trash2 size={11} className="mr-0.5 inline-block align-[-1px]" />
+          回收 {fmtCount(trash.length)}
         </button>
-        <div className="flex-1" />
+        </div>
+        <div className="shrink-0" />
         <button
           className="p-1 rounded hover:bg-black/10 text-black/50 hover:text-black/80"
           onClick={onNewNote}
@@ -325,75 +351,29 @@ export function Sidebar({
       <div className="flex-1 overflow-y-auto py-1">
         {tab === 'notes' && (
           <>
-            {/* 分类筛选（#41）：选中同时过滤画布（属主在 App）；再点取消。
-                有选中时行恒渲染（哪怕清单已空）——否则清空选中分类的全部便签后
-                「全部」chip 消失，画布卡在空筛选态无法恢复（评审发现） */}
-            {(categories.length > 0 || selectedCategory !== null) && (
-              <div className="flex flex-wrap gap-1 px-3 pt-1.5 pb-1 border-b border-black/5">
-                <button
-                  className={`px-1.5 h-[19px] rounded-full text-[10.5px] transition-colors ${
-                    selectedCategory === null
-                      ? 'bg-amber-500/15 text-amber-700 font-medium'
-                      : 'text-black/45 hover:bg-black/5'
-                  }`}
-                  onClick={() => onSelectCategory(null)}
-                >
-                  全部 {notes.length}
-                </button>
-                {notes.some((n) => !n.category) && (
-                  <button
-                    className={`px-1.5 h-[19px] rounded-full text-[10.5px] transition-colors ${
-                      selectedCategory === ''
-                        ? 'bg-amber-500/15 text-amber-700 font-medium'
-                        : 'text-black/45 hover:bg-black/5'
-                    }`}
-                    onClick={() => onSelectCategory(selectedCategory === '' ? null : '')}
-                  >
-                    无分类 {notes.filter((n) => !n.category).length}
-                  </button>
-                )}
-                {categories.map((c) => (
-                  <button
-                    key={c}
-                    className={`px-1.5 h-[19px] rounded-full text-[10.5px] transition-colors ${
-                      selectedCategory === c
-                        ? 'bg-amber-500/15 text-amber-700 font-medium'
-                        : 'text-black/45 hover:bg-black/5'
-                    }`}
-                    onClick={() => onSelectCategory(selectedCategory === c ? null : c)}
-                  >
-                    {c} {notes.filter((n) => n.category === c).length}
-                  </button>
-                ))}
-              </div>
-            )}
-            {tagCounts.length > 0 && (
-              <div className="flex flex-wrap gap-1 px-3 pt-1.5 pb-1 border-b border-black/5">
-                <button
-                  className={`px-1.5 h-[19px] rounded-full text-[10.5px] transition-colors ${
-                    tagFilter === null
-                      ? 'bg-amber-500/15 text-amber-700 font-medium'
-                      : 'text-black/45 hover:bg-black/5'
-                  }`}
-                  onClick={() => setTagFilter(null)}
-                >
-                  全部 {notes.length}
-                </button>
-                {tagCounts.map(([tag, count]) => (
-                  <button
-                    key={tag}
-                    className={`px-1.5 h-[19px] rounded-full text-[10.5px] transition-colors ${
-                      tagFilter === tag
-                        ? 'bg-amber-500/15 text-amber-700 font-medium'
-                        : 'text-black/45 hover:bg-black/5'
-                    }`}
-                    onClick={() => setTagFilter(tagFilter === tag ? null : tag)}
-                  >
-                    #{tag} {count}
-                  </button>
-                ))}
-              </div>
-            )}
+            {/* 筛选下拉选择器（#49）：替代两行筛选 chip（一多难浏览）。
+                计数对称联动：分类菜单按标签筛选后分布、标签菜单按分类筛选后分布，
+                不再出现「数字说有、列表说无」。有选中时选择器恒渲染（#41 卡死态教训）。 */}
+            <div className="flex flex-wrap gap-1 px-3 pt-1.5 pb-1 border-b border-black/5">
+              {(categories.length > 0 || selectedCategory !== null) && (
+                <FilterMenuButton
+                  icon={<FolderOpen size={11} />}
+                  name="分类"
+                  selected={selectedCategory}
+                  options={categoryOptions}
+                  onSelect={onSelectCategory}
+                />
+              )}
+              {(tagOptions.length > 1 || tagFilter !== null) && (
+                <FilterMenuButton
+                  icon={<Hash size={11} />}
+                  name="标签"
+                  selected={tagFilter}
+                  options={tagOptions}
+                  onSelect={setTagFilter}
+                />
+              )}
+            </div>
             {visibleNotes.length === 0 && (
               <div className="px-3 py-6 text-center text-[12px] text-black/40">
                 {tagFilter !== null ? `没有带 #${tagFilter} 标签的便签` : '还没有便签'}
