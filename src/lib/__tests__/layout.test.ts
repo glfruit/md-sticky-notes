@@ -11,6 +11,8 @@ import {
   snapValue,
   edgeCandidates,
   clampIntoScrollArea,
+  effectiveViewport,
+  SIDEBAR_W,
 } from '../layout'
 
 const mk = (id: string, width: number, height: number, z = 0, collapsed = false) => ({
@@ -322,6 +324,23 @@ describe('edgeCandidates 对齐候选线', () => {
     // 手算对照：xs = [100, 300, 300-300=0]；ys = [50, 170, 170-320=-150]
     expect(edgeCandidates(rect(100, 50, 200, 120), { width: 300, height: 320 }))
       .toEqual({ xs: [100, 300, 0], ys: [50, 170, -150] })
+  })
+})
+
+describe('effectiveViewport 有效视口（固定侧栏推开画布后）', () => {
+  it('未固定：原窗口尺寸（同一对象语义，值相等）', () => {
+    expect(effectiveViewport({ width: 1180, height: 700 }, false))
+      .toEqual({ width: 1180, height: 700 })
+  })
+
+  it('固定：宽减 SIDEBAR_W，高不变', () => {
+    expect(effectiveViewport({ width: 1180, height: 700 }, true))
+      .toEqual({ width: 1180 - SIDEBAR_W, height: 700 })
+  })
+
+  it('极窄窗口 clamp 到 0（负宽对几何计算无意义）', () => {
+    expect(effectiveViewport({ width: 100, height: 700 }, true))
+      .toEqual({ width: 0, height: 700 })
   })
 })
 
