@@ -304,6 +304,42 @@ export function centerScroll(target: Rect, view: Size, content: Size): { left: n
   }
 }
 
+/** 聚焦展示的放大基准与四周视觉边距（#54） */
+const FOCUS_SCALE_BASE = 1.25
+const FOCUS_PAD = 32
+
+/** 聚焦模式变换结果（#54）：scale 放大倍率；dx/dy 画布坐标系下的视觉平移量 */
+export interface FocusTransform {
+  scale: number
+  dx: number
+  dy: number
+}
+
+/** 聚焦模式变换（#54）：其余便签隐藏后，把目标便签视觉平移+缩放到视口正中
+ *  （菜单栏下方区域的几何中心）。scale 基准 1.25，钳制到缩放后含 FOCUS_PAD
+ *  边距完整可见（大便签缩小展示，宽/高较小比值获胜）；dx/dy 为画布坐标系下
+ *  的视觉平移量（当前滚动位置已计入），配合 transformOrigin center 使用。
+ *  纯视觉变换：不改便签几何、不落盘。 */
+export function focusTransform(
+  rect: Rect,
+  viewport: Size,
+  scroll: { left: number; top: number },
+): FocusTransform {
+  const usableH = viewport.height - MENU_BAR_H
+  const scale = Math.min(
+    FOCUS_SCALE_BASE,
+    (viewport.width - FOCUS_PAD * 2) / rect.width,
+    (usableH - FOCUS_PAD * 2) / rect.height,
+  )
+  const cx = scroll.left + viewport.width / 2
+  const cy = scroll.top + MENU_BAR_H + usableH / 2
+  return {
+    scale,
+    dx: cx - (rect.x + rect.width / 2),
+    dy: cy - (rect.y + rect.height / 2),
+  }
+}
+
 /** 拖动吸附：v 距任一候选线 ≤ SNAP_DIST 时取最近候选，否则原值 */
 export function snapValue(v: number, candidates: number[]): number {
   let best = v

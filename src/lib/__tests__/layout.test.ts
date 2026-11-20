@@ -13,6 +13,7 @@ import {
   clampIntoScrollArea,
   effectiveViewport,
   SIDEBAR_W,
+  focusTransform,
 } from '../layout'
 
 const mk = (id: string, width: number, height: number, z = 0, collapsed = false) => ({
@@ -353,5 +354,55 @@ describe('clampIntoScrollArea 负坐标裁剪', () => {
   it('负坐标裁到 ≥ 0，其余字段保留', () => {
     expect(clampIntoScrollArea({ x: -20, y: 50, id: 'a' })).toEqual({ x: 0, y: 50, id: 'a' })
     expect(clampIntoScrollArea({ x: -20, y: -5, id: 'b' })).toEqual({ x: 0, y: 0, id: 'b' })
+  })
+})
+
+describe('focusTransform 聚焦展示变换（#54）', () => {
+  const view = { width: 1400, height: 900 }
+  // 视口 1400×900：可用高 900-28=872，目标中心 cx=700、cy=28+872/2=464
+
+  it('基准放大 1.25，已居中便签零平移', () => {
+    // rect {550,304,300,320} 中心恰在 (700,464)；fit=min(4.45,2.53) 均大于基准
+    expect(focusTransform(rect(550, 304, 300, 320), view, { left: 0, top: 0 })).toEqual({
+      scale: 1.25,
+      dx: 0,
+      dy: 0,
+    })
+  })
+
+  it('左上角便签平移到视口正中', () => {
+    // dx=700-150=550，dy=464-160=304
+    expect(focusTransform(rect(0, 0, 300, 320), view, { left: 0, top: 0 })).toEqual({
+      scale: 1.25,
+      dx: 550,
+      dy: 304,
+    })
+  })
+
+  it('大便签钳制到完整可见（fitY 更小获胜，菜单栏高参与可用高）', () => {
+    // 视口 800×600：可用高 572；fitX=(800-64)/1000=0.736、fitY=(572-64)/800=0.635 → 0.635
+    // cx=400、cy=28+286=314 → dx=400-500=-100、dy=314-400=-86
+    expect(focusTransform(rect(0, 0, 1000, 800), { width: 800, height: 600 }, { left: 0, top: 0 })).toEqual({
+      scale: 0.635,
+      dx: -100,
+      dy: -86,
+    })
+  })
+
+  it('当前滚动位置计入平移（画布坐标系换算）', () => {
+    expect(focusTransform(rect(0, 0, 300, 320), view, { left: 100, top: 50 })).toEqual({
+      scale: 1.25,
+      dx: 650,
+      dy: 354,
+    })
+  })
+
+  it('高便签缩放由 fitY 决定（基准与 fitX 都不触限）', () => {
+    // fitY=(872-64)/800=1.01 < 1.25 → scale 1.01；dy=464-400=64
+    expect(focusTransform(rect(0, 0, 300, 800), view, { left: 0, top: 0 })).toEqual({
+      scale: 1.01,
+      dx: 550,
+      dy: 64,
+    })
   })
 })
