@@ -65,6 +65,11 @@ export function extractPriority(text: string): PriorityMark | null {
   return (PRIORITY_MARKS as readonly string[]).includes(mark ?? '') ? (mark as PriorityMark) : null
 }
 
+/** 剥除任务文本前缀的优先级 emoji（#53 显示层用：emoji 由优先级 chip 单独渲染，文本不重复） */
+export function stripPriority(text: string): string {
+  return text.replace(PRIORITY_PREFIX_RE, '')
+}
+
 /** 优先级排序权重（🔥2 ⚡1 🐢0，无/未知 -1）——groupTasks 组内次序用 */
 export function priorityWeight(mark?: string | null): number {
   const i = PRIORITY_MARKS.indexOf(mark as PriorityMark)
