@@ -267,6 +267,7 @@ export default function App() {
         onHoverLeave={() => setSidebarHover(false)}
         onRestore={restoreTrashNote}
         onPermanentDelete={permanentlyDeleteTrash}
+        onUpdate={updateNote}
         selectedCategory={selectedCategory}
         onSelectCategory={setSelectedCategory}
       />

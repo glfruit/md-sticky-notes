@@ -3,6 +3,7 @@ import {
   setTaskAtIndex,
   setTaskPriority,
   extractPriority,
+  stripPriority,
   priorityWeight,
   cycleTaskAtIndex,
   parseRecurrence,
@@ -224,6 +225,13 @@ describe('任务优先级 emoji（#47）', () => {
     expect(extractPriority('⚡冲刺')).toBe('⚡')
     expect(extractPriority('写 🐢 周报')).toBeNull() // 不在前缀不算
     expect(extractPriority('普通任务')).toBeNull()
+  })
+
+  it('stripPriority（#53）：剥前缀 emoji 与首尾空白；非前缀 / 无 emoji 原样', () => {
+    expect(stripPriority(' 🔥 写周报')).toBe('写周报')
+    expect(stripPriority('⚡冲刺')).toBe('冲刺')
+    expect(stripPriority('写 🐢 周报')).toBe('写 🐢 周报') // 非前缀不动
+    expect(stripPriority('普通任务')).toBe('普通任务')
   })
 
   it('priorityWeight：🔥2 ⚡1 🐢0 无 −1', () => {
