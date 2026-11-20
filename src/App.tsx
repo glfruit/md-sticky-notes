@@ -45,32 +45,12 @@ export default function App() {
   const [flashId, setFlashId] = useState<string | null>(null)
   const [windowSize, setWindowSize] = useState(() => ({ width: window.innerWidth, height: window.innerHeight }))
   // 聚焦模式（#54）：单便签居中放大展示、其余隐藏；App 层瞬态，不落盘不持久化
-  const [focusId, setFocusId] = useState<string | null>(null) (便签聚焦模式：右键聚焦后其余便签隐藏、目标居中放大（#54）：lib/layout 新增 focusTransform 纯函数（scale 基准 1.25 钳制完整可见、dx/dy 画布坐标视觉平移计入当前滚动，先测后码 5 用例）；App 层 focusId 瞬态（不落盘），渲染期 useMemo 稳定引用，渲染分支隐藏其余便签（含置顶）、聚焦中分类筛掉目标补渲染；右键菜单加「聚焦」项；聚焦态冻结拖动/缩放/折叠/最大化（StickyNote focusTransform prop），内容交互保留；退出通道 Esc（isMenuOpen/searchOpen/storageOpen 让位）+ 点空白层 + 删除自退 + 新建/侧栏选中/搜索跳转其它便签自动退出；评审修正：互斥登记下沉 lib/menu 单源（react-refresh 组件文件不导出函数）、prop 改名 focusTransform 避与 onFocus 同名异义、FocusTransform 类型导出复用、CONTEXT.md 收录聚焦模式词条)
+  const [focusId, setFocusId] = useState<string | null>(null)
   // 分类筛选（#41）：null=全部、''=无分类（哨兵，见 filterByCategory）；刷新保持
   const [selectedCategory, setSelectedCategory] = useState<string | null>(
     () => localStorage.getItem(CATEGORY_KEY),
   )
 
-  // 聚焦模式入口（#54）：折叠便签先展开（居中完整显示同惯例）；变换由渲染期
-  // 从当前 scroll/viewport 现算（见 focus 变量），无需在此落任何派生状态
-  const enterFocus = useCallback(
-    (id: string) => {
-      const target = notes.find((n) => n.id === id)
-      if (!target) return
-      if (target.collapsed) updateNote(id, { collapsed: false })
-      setFocusId(id)
-    },
-    [notes, updateNote],
-  )
-
-  // 新建便签退出聚焦：否则新便签被聚焦态隐藏，用户点了「新建」却看不到
-  const newNote = useCallback(
-    (content = '') => {
-      setFocusId(null)
-      return addNote(content)
-    },
-    [addNote],
-  )
 
   useEffect(() => {
     localStorage.setItem(PIN_KEY, sidebarPinned ? '1' : '0')
@@ -92,6 +72,27 @@ export default function App() {
   const viewport = useMemo(() => effectiveViewport(windowSize, sidebarPinned), [windowSize, sidebarPinned])
 
   const { notes, trash, loadError, reload, addNote, updateNote, deleteNote, bringToFront, switchFolder, cleanAttachments, flushPendingSaves, restoreTrashNote, permanentlyDeleteTrash } = useNotes({ viewport })
+
+  // 聚焦模式入口（#54）：折叠便签先展开（居中完整显示同惯例）；变换由渲染期
+  // 从当前 scroll/viewport 现算（见 focus 变量），无需在此落任何派生状态
+  const enterFocus = useCallback(
+    (id: string) => {
+      const target = notes.find((n) => n.id === id)
+      if (!target) return
+      if (target.collapsed) updateNote(id, { collapsed: false })
+      setFocusId(id)
+    },
+    [notes, updateNote],
+  )
+
+  // 新建便签退出聚焦：否则新便签被聚焦态隐藏，用户点了「新建」却看不到
+  const newNote = useCallback(
+    (content = '') => {
+      setFocusId(null)
+      return addNote(content)
+    },
+    [addNote],
+  )
 
   // 到点系统通知（桌面版）
   useReminders(notes)
@@ -283,10 +284,11 @@ export default function App() {
   const sidebarVisible = sidebarPinned || sidebarHover
 
   // 聚焦变换（#54）：useMemo 稳定引用——deps 不变不产新对象，保 StickyNote 的
-  // memo 有效性；notes/viewport 覆盖内容与 resize 变化。viewport 传窗口原始
-  // 尺寸（菜单栏高由 focusTransform 内扣，与 tidyLayout 同口径；传滚动层
-  // clientHeight 会双扣）；滚动读 scrollRef——聚焦态画布滚动被空白层挡住
-  // （wheel 不穿透 fixed 层），读值稳定
+  // memo 有效性；notes/viewport 覆盖内容与 resize、固定侧栏推挤变化。viewport
+  // 传有效视口（#52 effectiveViewport 派生，已扣固定侧栏；菜单栏高由
+  // focusTransform 内扣，与 tidyLayout 同口径；传滚动层 clientHeight 会双扣）；
+  // 滚动读 scrollRef——聚焦态画布滚动被空白层挡住（wheel 不穿透 fixed 层），
+  // 读值稳定
   const focusView = useMemo<FocusTransform | null>(() => {
     if (!focusId) return null
     const t = notes.find((n) => n.id === focusId)

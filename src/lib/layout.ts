@@ -220,7 +220,7 @@ export function findSpawnSpot(opts: {
   occupied: Rect[]
   /** 新便签尺寸 */
   size: Size
-  /** 窗口视口（innerWidth/innerHeight，菜单栏高在函数内扣除，与 tidyLayout 同口径） */
+  /** 有效视口（#52 effectiveViewport 派生，已扣固定侧栏；菜单栏高在函数内扣除，与 tidyLayout 同口径） */
   viewport: Size
   /** 级联序列起始序号（现有便签数） */
   start: number
