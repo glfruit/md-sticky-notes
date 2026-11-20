@@ -61,6 +61,10 @@ export const StickyNote = memo(function StickyNote({
   const colors = NOTE_COLORS[note.color]
   // 聚焦态冻结几何交互（#54）：变换已把便签挪离原位，再拖动/缩放/折叠只会乱
   const frozen = focusTransform != null
+  // MASTER.md 动效纪律：尊重 prefers-reduced-motion（聚焦缩放过渡随之关闭）
+  const motionOK =
+    typeof window.matchMedia === 'function' &&
+    !window.matchMedia('(prefers-reduced-motion: reduce)').matches
   // 预览模式任务进度（无任务为 null）：标题栏徽标数据源，与 extractTasks 同源（跳过围栏代码块、归档区计入）
   const progress = note.preview ? taskProgress(note.content) : null
   const rootRef = useRef<HTMLDivElement>(null)
@@ -245,9 +249,10 @@ export const StickyNote = memo(function StickyNote({
         transform: focusTransform
           ? `translate(${focusTransform.dx}px, ${focusTransform.dy}px) scale(${focusTransform.scale})`
           : undefined,
-        transition: focusTransform
-          ? 'transform 0.18s ease-out, box-shadow 0.3s ease'
-          : 'box-shadow 0.3s ease',
+        transition:
+          focusTransform && motionOK
+            ? 'transform 0.18s ease-out, box-shadow 0.3s ease'
+            : 'box-shadow 0.3s ease',
       }}
       onPointerDown={() => onFocus(note.id)}
       onKeyDown={handleKeyDown}

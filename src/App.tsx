@@ -283,8 +283,10 @@ export default function App() {
   const sidebarVisible = sidebarPinned || sidebarHover
 
   // 聚焦变换（#54）：useMemo 稳定引用——deps 不变不产新对象，保 StickyNote 的
-  // memo 有效性；依赖 notes/viewport 覆盖内容与 resize 变化。滚动读 scrollRef：
-  // 聚焦态画布滚动被空白层挡住（wheel 不穿透 fixed 层），读值稳定
+  // memo 有效性；notes/viewport 覆盖内容与 resize 变化。viewport 传窗口原始
+  // 尺寸（菜单栏高由 focusTransform 内扣，与 tidyLayout 同口径；传滚动层
+  // clientHeight 会双扣）；滚动读 scrollRef——聚焦态画布滚动被空白层挡住
+  // （wheel 不穿透 fixed 层），读值稳定
   const focusView = useMemo<FocusTransform | null>(() => {
     if (!focusId) return null
     const t = notes.find((n) => n.id === focusId)
@@ -292,11 +294,9 @@ export default function App() {
     if (!t || !sc) return null
     return focusTransform(
       { x: t.x, y: t.y, width: t.width, height: t.height },
-      { width: sc.clientWidth, height: sc.clientHeight },
+      viewport,
       { left: sc.scrollLeft, top: sc.scrollTop },
     )
-    // viewport 是 resize 重算信号；尺寸以滚动层 clientWidth/Height 实测为准
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusId, notes, viewport])
   // 聚焦中目标被分类筛掉时补渲染目标（否则「聚焦中改筛选」目标凭空消失）
   const renderNotes =
@@ -379,7 +379,7 @@ export default function App() {
         <>
           <div className="fixed top-7 inset-x-0 bottom-0 z-0" onPointerDown={() => setFocusId(null)} />
           <div className="fixed top-9 left-1/2 -translate-x-1/2 z-[9500] pointer-events-none">
-            <div className="text-stone-600 text-xs bg-white/85 border border-stone-900/10 backdrop-blur px-3 py-1.5 rounded-full shadow-sm">
+            <div className="text-stone-600 text-xs bg-white/70 border border-stone-900/10 backdrop-blur px-3 py-1.5 rounded-full shadow-sm">
               聚焦中 — Esc 或点击空白退出
             </div>
           </div>
