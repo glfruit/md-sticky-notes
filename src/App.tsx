@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { LocateFixed } from 'lucide-react'
+import { Focus, LocateFixed } from 'lucide-react'
 import { useNotes } from '@/hooks/useNotes'
 import { StickyNote } from '@/components/StickyNote'
 import type { RevealTarget } from '@/types/note'
 import { Menu, MenuItem } from '@/components/Menu'
+import { isMenuOpen } from '@/lib/menu'
 import { MenuBar } from '@/components/MenuBar'
 import { SearchPanel } from '@/components/SearchPanel'
 import type { SearchJump } from '@/components/SearchPanel'
@@ -23,6 +24,8 @@ import {
   centerScroll,
   effectiveViewport,
   SIDEBAR_W,
+  focusTransform,
+  type FocusTransform,
   type NoteGeometry,
 } from '@/lib/layout'
 import './App.css'
@@ -41,10 +44,13 @@ export default function App() {
   const [sidebarHover, setSidebarHover] = useState(false)
   const [flashId, setFlashId] = useState<string | null>(null)
   const [windowSize, setWindowSize] = useState(() => ({ width: window.innerWidth, height: window.innerHeight }))
+  // 聚焦模式（#54）：单便签居中放大展示、其余隐藏；App 层瞬态，不落盘不持久化
+  const [focusId, setFocusId] = useState<string | null>(null)
   // 分类筛选（#41）：null=全部、''=无分类（哨兵，见 filterByCategory）；刷新保持
   const [selectedCategory, setSelectedCategory] = useState<string | null>(
     () => localStorage.getItem(CATEGORY_KEY),
   )
+
 
   useEffect(() => {
     localStorage.setItem(PIN_KEY, sidebarPinned ? '1' : '0')
@@ -67,6 +73,27 @@ export default function App() {
 
   const { notes, trash, loadError, reload, addNote, updateNote, deleteNote, bringToFront, switchFolder, cleanAttachments, flushPendingSaves, restoreTrashNote, permanentlyDeleteTrash } = useNotes({ viewport })
 
+  // 聚焦模式入口（#54）：折叠便签先展开（居中完整显示同惯例）；变换由渲染期
+  // 从当前 scroll/viewport 现算（见 focus 变量），无需在此落任何派生状态
+  const enterFocus = useCallback(
+    (id: string) => {
+      const target = notes.find((n) => n.id === id)
+      if (!target) return
+      if (target.collapsed) updateNote(id, { collapsed: false })
+      setFocusId(id)
+    },
+    [notes, updateNote],
+  )
+
+  // 新建便签退出聚焦：否则新便签被聚焦态隐藏，用户点了「新建」却看不到
+  const newNote = useCallback(
+    (content = '') => {
+      setFocusId(null)
+      return addNote(content)
+    },
+    [addNote],
+  )
+
   // 到点系统通知（桌面版）
   useReminders(notes)
 
@@ -80,20 +107,20 @@ export default function App() {
         const prefill =
           localStorage.getItem('md-sticky-notes:clipboard-prefill') !== '0' &&
           typeof e.payload === 'string'
-        addNote(prefill ? (e.payload as string) : '')
+        newNote(prefill ? (e.payload as string) : '')
       }).then((fn) => {
         unlisten = fn
       }),
     )
     return () => unlisten?.()
-  }, [addNote])
+  }, [newNote])
 
   // 全局快捷键：⌥N 新建；⌘F / ⌥F 搜索；⌥B 固定 / 隐藏侧栏
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.altKey && !e.metaKey && !e.ctrlKey && e.key.toLowerCase() === 'n') {
         e.preventDefault()
-        addNote()
+        newNote()
       } else if ((e.metaKey || e.ctrlKey || e.altKey) && e.key.toLowerCase() === 'f') {
         e.preventDefault()
         setSearchOpen((v) => !v)
@@ -104,7 +131,7 @@ export default function App() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [addNote])
+  }, [newNote])
 
   // 画布可见便签（#41 分类筛选）：渲染与几何派生（吸附候选 / 画布尺寸）同步收窄
   const canvasNotes = useMemo(
@@ -173,6 +200,8 @@ export default function App() {
 
   const handleJump = useCallback(
     (jump: SearchJump) => {
+      // 聚焦中跳转其它便签：先退出聚焦，否则目标被聚焦态隐藏
+      if (focusId && jump.noteId !== focusId) setFocusId(null)
       const target = notes.find((n) => n.id === jump.noteId)
       // 搜索面板是全量的：跳转目标可能被分类筛选隐藏，清除筛选确保可见（#41）
       if (target && selectedCategory !== null && filterByCategory([target], selectedCategory).length === 0) {
@@ -188,12 +217,14 @@ export default function App() {
         )
       }
     },
-    [notes, selectedCategory, bringToFront, scrollToNote],
+    [notes, selectedCategory, bringToFront, scrollToNote, focusId],
   )
 
   // 侧栏选中便签：置顶、展开并短暂高亮
   const selectNote = useCallback(
     (id: string) => {
+      // 聚焦中选中其它便签：先退出聚焦（同 handleJump）
+      if (focusId && id !== focusId) setFocusId(null)
       const target = notes.find((n) => n.id === id)
       bringToFront(id)
       updateNote(id, { collapsed: false })
@@ -203,8 +234,25 @@ export default function App() {
         requestAnimationFrame(() => scrollToNote(target.x, target.y, target.width, target.height))
       }
     },
-    [notes, bringToFront, updateNote, scrollToNote],
+    [notes, bringToFront, updateNote, scrollToNote, focusId],
   )
+
+  // 聚焦退出通道（#54）：Esc——搜索/设置打开或任何 Menu 原语实例（便签菜单 /
+  // 任务状态菜单等）打开时让位。Menu 的 window 级 Esc 不阻断传播，而 isMenuOpen()
+  // 在同一次按键里仍为 true（关闭是异步 setState）——「让位一次、下次按键再退」
+  useEffect(() => {
+    if (!focusId) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !searchOpen && !storageOpen && !isMenuOpen()) setFocusId(null)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [focusId, searchOpen, storageOpen])
+
+  // 聚焦目标被删除（红点 / 侧栏回收站）自动退出，不留悬空聚焦
+  useEffect(() => {
+    if (focusId && !notes.some((n) => n.id === focusId)) setFocusId(null)
+  }, [notes, focusId])
 
   // 自动整理：一屏收纳（lib 布局纯函数产补丁）——原尺寸放不下时等比缩小，
   // 触宽度下限回退续排；画布放不下仍可滚动（现状回退行为）；视口用有效口径（#52）
@@ -235,10 +283,33 @@ export default function App() {
 
   const sidebarVisible = sidebarPinned || sidebarHover
 
+  // 聚焦变换（#54）：useMemo 稳定引用——deps 不变不产新对象，保 StickyNote 的
+  // memo 有效性；notes/viewport 覆盖内容与 resize、固定侧栏推挤变化。viewport
+  // 传有效视口（#52 effectiveViewport 派生，已扣固定侧栏；菜单栏高由
+  // focusTransform 内扣，与 tidyLayout 同口径；传滚动层 clientHeight 会双扣）；
+  // 滚动读 scrollRef——聚焦态画布滚动被空白层挡住（wheel 不穿透 fixed 层），
+  // 读值稳定
+  const focusView = useMemo<FocusTransform | null>(() => {
+    if (!focusId) return null
+    const t = notes.find((n) => n.id === focusId)
+    const sc = scrollRef.current
+    if (!t || !sc) return null
+    return focusTransform(
+      { x: t.x, y: t.y, width: t.width, height: t.height },
+      viewport,
+      { left: sc.scrollLeft, top: sc.scrollTop },
+    )
+  }, [focusId, notes, viewport])
+  // 聚焦中目标被分类筛掉时补渲染目标（否则「聚焦中改筛选」目标凭空消失）
+  const renderNotes =
+    focusId && !canvasNotes.some((n) => n.id === focusId)
+      ? [...canvasNotes, ...notes.filter((n) => n.id === focusId)]
+      : canvasNotes
+
   return (
     <div className="desktop fixed inset-0 overflow-hidden">
       <MenuBar
-        onNewNote={() => addNote()}
+        onNewNote={() => newNote()}
         onSearch={() => setSearchOpen(true)}
         onExportAll={() => void exportAllNotes(notes)}
         onTidy={tidyNotes}
@@ -263,7 +334,7 @@ export default function App() {
         onTogglePin={() => setSidebarPinned((v) => !v)}
         onSelect={selectNote}
         onDelete={deleteNote}
-        onNewNote={() => addNote()}
+        onNewNote={() => newNote()}
         onHoverLeave={() => setSidebarHover(false)}
         onRestore={restoreTrashNote}
         onPermanentDelete={permanentlyDeleteTrash}
@@ -280,25 +351,42 @@ export default function App() {
         style={{ left: sidebarPinned ? SIDEBAR_W : 0 }}
       >
         <div ref={canvasRef} className="relative" style={{ width: canvasSize.width, height: canvasSize.height }}>
-          {canvasNotes.map((note) => (
-            <StickyNote
-              key={note.id}
-              note={note}
-              onUpdate={updateNote}
-              onDelete={deleteNote}
-              onFocus={bringToFront}
-              onRequestNoteMenu={openNoteMenu}
-              reveal={reveal && reveal.noteId === note.id ? reveal : null}
-              flashing={flashId === note.id}
-              snapTargets={geometries}
-              viewport={viewport}
-              categories={categories}
-              scrollRef={scrollRef}
-              canvasRef={canvasRef}
-            />
-          ))}
+          {renderNotes.map((note) => {
+            // 聚焦态（#54）：其余便签（含置顶）不渲染——「消失」语义
+            if (focusId && note.id !== focusId) return null
+            return (
+              <StickyNote
+                key={note.id}
+                note={note}
+                onUpdate={updateNote}
+                onDelete={deleteNote}
+                onFocus={bringToFront}
+                onRequestNoteMenu={openNoteMenu}
+                reveal={reveal && reveal.noteId === note.id ? reveal : null}
+                flashing={flashId === note.id}
+                snapTargets={geometries}
+                viewport={viewport}
+                categories={categories}
+                scrollRef={scrollRef}
+                canvasRef={canvasRef}
+                focusTransform={focusView}
+              />
+            )
+          })} (便签聚焦模式：右键聚焦后其余便签隐藏、目标居中放大（#54）：lib/layout 新增 focusTransform 纯函数（scale 基准 1.25 钳制完整可见、dx/dy 画布坐标视觉平移计入当前滚动，先测后码 5 用例）；App 层 focusId 瞬态（不落盘），渲染期 useMemo 稳定引用，渲染分支隐藏其余便签（含置顶）、聚焦中分类筛掉目标补渲染；右键菜单加「聚焦」项；聚焦态冻结拖动/缩放/折叠/最大化（StickyNote focusTransform prop），内容交互保留；退出通道 Esc（isMenuOpen/searchOpen/storageOpen 让位）+ 点空白层 + 删除自退 + 新建/侧栏选中/搜索跳转其它便签自动退出；评审修正：互斥登记下沉 lib/menu 单源（react-refresh 组件文件不导出函数）、prop 改名 focusTransform 避与 onFocus 同名异义、FocusTransform 类型导出复用、CONTEXT.md 收录聚焦模式词条)
         </div>
       </div>
+
+      {/* 聚焦态空白层：点空白退出；z-0 在便签（z ≥ 1）之下，不挡目标便签交互 */}
+      {focusId && (
+        <>
+          <div className="fixed top-7 inset-x-0 bottom-0 z-0" onPointerDown={() => setFocusId(null)} />
+          <div className="fixed top-9 left-1/2 -translate-x-1/2 z-[9500] pointer-events-none">
+            <div className="text-stone-600 text-xs bg-white/70 border border-stone-900/10 backdrop-blur px-3 py-1.5 rounded-full shadow-sm">
+              聚焦中 — Esc 或点击空白退出
+            </div>
+          </div>
+        </>
+      )}
 
       {loadError !== null && (
         /* 同步文件夹读取失败（#44，典型：更新后 TCC 授权失效）：给出路径与放行指引，
@@ -367,6 +455,15 @@ export default function App() {
             }}
           >
             居中完整显示
+          </MenuItem>
+          <MenuItem
+            icon={<Focus size={12} className="text-black/45 shrink-0" />}
+            onClick={() => {
+              enterFocus(noteMenu.noteId)
+              closeNoteMenu()
+            }}
+          >
+            聚焦
           </MenuItem>
         </Menu>
       )}

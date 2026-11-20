@@ -8,7 +8,7 @@ import { exportNote } from '@/lib/export'
 import { cleanupMarkdown } from '@/lib/editor'
 import { setTaskAtIndex, setTaskPriority, archiveCompletedTasks, convertListItemToTask, convertTaskToListItem, extractTasks, taskProgress, TASK_STATUS_META, PRIORITY_META, type PriorityMark } from '@/lib/taskLines'
 import type { TaskStatus } from '@/lib/taskLines'
-import type { NoteGeometry, Size } from '@/lib/layout'
+import type { NoteGeometry, Size, FocusTransform } from '@/lib/layout'
 import { useNoteEditor } from '@/hooks/useNoteEditor'
 import { useNoteDrag } from '@/hooks/useNoteDrag'
 import { useNotePreview } from '@/hooks/useNotePreview'
@@ -37,6 +37,9 @@ interface Props {
   scrollRef?: React.RefObject<HTMLDivElement | null>
   /** 滚动画布：便签拖出视口时撑大内容区 */
   canvasRef?: React.RefObject<HTMLDivElement | null>
+  /** 聚焦态变换（#54，App 层算好传入）：其余便签隐藏后本便签居中放大展示；
+   *  有值即进入展示契约——拖动/缩放/折叠/最大化冻结，内容交互不受影响 */
+  focusTransform?: FocusTransform | null
 }
 
 /** memo 化：单张便签的重渲染只由自身 props 驱动（拖动 / 其他便签更新不再全树重绘） */
@@ -53,8 +56,15 @@ export const StickyNote = memo(function StickyNote({
   categories,
   scrollRef,
   canvasRef,
+  focusTransform,
 }: Props) {
   const colors = NOTE_COLORS[note.color]
+  // 聚焦态冻结几何交互（#54）：变换已把便签挪离原位，再拖动/缩放/折叠只会乱
+  const frozen = focusTransform != null
+  // MASTER.md 动效纪律：尊重 prefers-reduced-motion（聚焦缩放过渡随之关闭）
+  const motionOK =
+    typeof window.matchMedia === 'function' &&
+    !window.matchMedia('(prefers-reduced-motion: reduce)').matches
   // 预览模式任务进度（无任务为 null）：标题栏徽标数据源，与 extractTasks 同源（跳过围栏代码块、归档区计入）
   const progress = note.preview ? taskProgress(note.content) : null
   const rootRef = useRef<HTMLDivElement>(null)
@@ -235,7 +245,14 @@ export const StickyNote = memo(function StickyNote({
         boxShadow: flashing
           ? '0 1px 2px rgba(28,25,23,0.10), 0 10px 28px rgba(28,25,23,0.16), 0 0 0 3px rgba(217,119,6,0.75)'
           : '0 1px 2px rgba(28,25,23,0.10), 0 10px 28px rgba(28,25,23,0.16)',
-        transition: 'box-shadow 0.3s ease',
+        // 聚焦态（#54）：视觉平移+缩放到视口正中（几何坐标不动，纯展示变换）
+        transform: focusTransform
+          ? `translate(${focusTransform.dx}px, ${focusTransform.dy}px) scale(${focusTransform.scale})`
+          : undefined,
+        transition:
+          focusTransform && motionOK
+            ? 'transform 0.18s ease-out, box-shadow 0.3s ease'
+            : 'box-shadow 0.3s ease',
       }}
       onPointerDown={() => onFocus(note.id)}
       onKeyDown={handleKeyDown}
@@ -245,14 +262,14 @@ export const StickyNote = memo(function StickyNote({
     >
       {/* 标题栏 */}
       <div
-        className="flex items-center gap-1 px-2 h-7 shrink-0 cursor-grab active:cursor-grabbing select-none"
+        className={`flex items-center gap-1 px-2 h-7 shrink-0 select-none ${frozen ? '' : 'cursor-grab active:cursor-grabbing'}`}
         style={{ backgroundColor: note.translucent ? `${colors.bar}b3` : colors.bar }}
-        onPointerDown={startDrag}
+        onPointerDown={frozen ? undefined : startDrag}
         onDoubleClick={(e) => {
-          if ((e.target as HTMLElement).closest('button')) return
+          if (frozen || (e.target as HTMLElement).closest('button')) return
           onUpdate(note.id, { collapsed: !note.collapsed })
         }}
-        title="双击折叠 / 展开"
+        title={frozen ? '聚焦中：拖动 / 折叠已停用（Esc 退出）' : '双击折叠 / 展开'}
       >
         {/* 红绿灯 */}
         <div className="flex items-center gap-1.5 mr-1">
@@ -279,13 +296,14 @@ export const StickyNote = memo(function StickyNote({
           )}
           <button
             className="w-3 h-3 rounded-full bg-[#febc2e] border border-[#d89e24] hover:brightness-90"
-            onClick={() => onUpdate(note.id, { collapsed: !note.collapsed })}
-            title={note.collapsed ? '展开' : '折叠'}
+            onClick={frozen ? undefined : () => onUpdate(note.id, { collapsed: !note.collapsed })}
+            title={frozen ? '聚焦中：折叠已停用' : note.collapsed ? '展开' : '折叠'}
           />
           <button
-            className="w-3 h-3 rounded-full bg-[#28c840] border border-[#1dad2b] hover:brightness-90"
-            onClick={toggleMaximize}
-            title={maximized ? '还原窗口大小' : '最大化（再次点击还原）'}
+            className="w-3 h-3 rounded-full bg-[#28c840] border border-[#1dad2b] hover:brightness-90 disabled:opacity-50"
+            onClick={frozen ? undefined : toggleMaximize}
+            disabled={frozen}
+            title={frozen ? '聚焦中：最大化已停用' : maximized ? '还原窗口大小' : '最大化（再次点击还原）'}
           />
         </div>
 
@@ -583,15 +601,17 @@ export const StickyNote = memo(function StickyNote({
               )}
             </Menu>
           )}
-          {/* 缩放把手 */}
-          <div
-            className="absolute right-0 bottom-0 w-4 h-4 cursor-nwse-resize z-10"
-            onPointerDown={startResize}
-            style={{
-              background:
-                'linear-gradient(135deg, transparent 50%, rgba(0,0,0,0.18) 50%, rgba(0,0,0,0.18) 60%, transparent 60%, transparent 70%, rgba(0,0,0,0.18) 70%, rgba(0,0,0,0.18) 80%, transparent 80%)',
-            }}
-          />
+          {/* 缩放把手（聚焦态冻结：不渲染） */}
+          {!frozen && (
+            <div
+              className="absolute right-0 bottom-0 w-4 h-4 cursor-nwse-resize z-10"
+              onPointerDown={startResize}
+              style={{
+                background:
+                  'linear-gradient(135deg, transparent 50%, rgba(0,0,0,0.18) 50%, rgba(0,0,0,0.18) 60%, transparent 60%, transparent 70%, rgba(0,0,0,0.18) 70%, rgba(0,0,0,0.18) 80%, transparent 80%)',
+              }}
+            />
+          )}
         </div>
       )}
     </div>

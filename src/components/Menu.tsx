@@ -1,14 +1,13 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { clampMenuPosition } from '@/lib/menu'
+import { clampMenuPosition, claimActiveMenu, releaseActiveMenu } from '@/lib/menu'
 
 /** 菜单原语：唯一属主（standards.md「架构分层」）。新菜单一律消费这里，
  *  不手写 backdrop / Escape / 钳制——此前 App noteMenu 与 StickyNote ctxMenu 两套平行样板即本票要消灭的病。
  *  语义：portal 到 body（不受便签树 overflow 裁切）、视口坐标 fixed、实测尺寸钳进视口、
  *  Escape / 点外部 / 右键外部关闭、全局互斥（同时至多一个）。 */
 
-/** 全局互斥登记：开新菜单先关上一个（菜单状态分属不同组件，无共同父级可协调） */
-let closeActiveMenu: (() => void) | null = null
+// 互斥登记 / isMenuOpen 查询单源在 lib/menu（react-refresh：组件文件不导出函数）
 
 interface MenuProps {
   /** 期望左上角（视口坐标，右键落点 / 触发元素位置） */
@@ -25,11 +24,8 @@ export function Menu({ x, y, onClose, children }: MenuProps) {
 
   // 互斥：挂载时关掉上一个菜单；卸载时若是自己登记的则清空
   useEffect(() => {
-    closeActiveMenu?.()
-    closeActiveMenu = onClose
-    return () => {
-      if (closeActiveMenu === onClose) closeActiveMenu = null
-    }
+    claimActiveMenu(onClose)
+    return () => releaseActiveMenu(onClose)
   }, [onClose])
 
   // Escape 关闭（window 级：菜单打开时焦点通常不在菜单上）
