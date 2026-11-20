@@ -2,7 +2,7 @@ import { useCallback, useRef, useState } from 'react'
 import type { StickyNoteData } from '@/types/note'
 import { MIN_W, MIN_H } from '@/types/note'
 import { snapValue, edgeCandidates, maximizedRect, CANVAS_PAD, SNAP_VIEW_MARGIN } from '@/lib/layout'
-import type { NoteGeometry, Rect } from '@/lib/layout'
+import type { NoteGeometry, Rect, Size } from '@/lib/layout'
 
 /** 边缘自动滚动手感参数（非几何域，不入 lib/layout）：指针距滚动层可视边缘
  *  28px 内开始滚动（与 MENU_BAR_H 同值巧合），每帧步进 14px */
@@ -21,6 +21,9 @@ export function useNoteDrag(opts: {
   scrollRef?: React.RefObject<HTMLDivElement | null>
   /** 滚动画布：便签拖出视口时撑大内容区 */
   canvasRef?: React.RefObject<HTMLDivElement | null>
+  /** 有效视口（#52，App 单源）：最大化占位按推开后的收窄口径算，右缘不钻侧栏底下；
+   *  未供给时回退窗口实测（独立使用） */
+  viewport?: Size
   onUpdate: (id: string, patch: Partial<StickyNoteData>) => void
   onFocus: (id: string) => void
 }) {
@@ -36,12 +39,12 @@ export function useNoteDrag(opts: {
     } else {
       prevGeometry.current = { x: note.x, y: note.y, width: note.width, height: note.height }
       onUpdate(note.id, {
-        ...maximizedRect({ width: window.innerWidth, height: window.innerHeight }),
+        ...maximizedRect(opts.viewport ?? { width: window.innerWidth, height: window.innerHeight }),
         collapsed: false,
       })
       setMaximized(true)
     }
-  }, [maximized, note.id, note.x, note.y, note.width, note.height, onUpdate])
+  }, [maximized, note.id, note.x, note.y, note.width, note.height, opts.viewport, onUpdate])
 
   // 拖动窗口（带吸附对齐：其他便签边缘 + 视口边缘）
   // 拖动过程直写 DOM 不走 React 渲染；坐标为滚动画布的内容坐标，

@@ -21,6 +21,8 @@ import {
   canvasExtent,
   revealScroll,
   centerScroll,
+  effectiveViewport,
+  SIDEBAR_W,
   type NoteGeometry,
 } from '@/lib/layout'
 import './App.css'
@@ -30,7 +32,6 @@ const PIN_KEY = 'md-sticky-notes:sidebar-pinned'
 const CATEGORY_KEY = 'md-sticky-notes:category-filter'
 
 export default function App() {
-  const { notes, trash, loadError, reload, addNote, updateNote, deleteNote, bringToFront, switchFolder, cleanAttachments, flushPendingSaves, restoreTrashNote, permanentlyDeleteTrash } = useNotes()
   const scrollRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLDivElement>(null)
   const [searchOpen, setSearchOpen] = useState(false)
@@ -39,7 +40,7 @@ export default function App() {
   const [sidebarPinned, setSidebarPinned] = useState(() => localStorage.getItem(PIN_KEY) === '1')
   const [sidebarHover, setSidebarHover] = useState(false)
   const [flashId, setFlashId] = useState<string | null>(null)
-  const [viewport, setViewport] = useState(() => ({ width: window.innerWidth, height: window.innerHeight }))
+  const [windowSize, setWindowSize] = useState(() => ({ width: window.innerWidth, height: window.innerHeight }))
   // 分类筛选（#41）：null=全部、''=无分类（哨兵，见 filterByCategory）；刷新保持
   const [selectedCategory, setSelectedCategory] = useState<string | null>(
     () => localStorage.getItem(CATEGORY_KEY),
@@ -55,10 +56,16 @@ export default function App() {
   }, [selectedCategory])
 
   useEffect(() => {
-    const onResize = () => setViewport({ width: window.innerWidth, height: window.innerHeight })
+    const onResize = () => setWindowSize({ width: window.innerWidth, height: window.innerHeight })
     window.addEventListener('resize', onResize)
     return () => window.removeEventListener('resize', onResize)
   }, [])
+
+  // 有效视口（#52）：固定侧栏推开画布后便签可占的窗口区域，几何计算（画布尺寸 /
+  // 整理 / 出生 / 最大化）的宽度口径单源；未固定时即窗口原尺寸
+  const viewport = useMemo(() => effectiveViewport(windowSize, sidebarPinned), [windowSize, sidebarPinned])
+
+  const { notes, trash, loadError, reload, addNote, updateNote, deleteNote, bringToFront, switchFolder, cleanAttachments, flushPendingSaves, restoreTrashNote, permanentlyDeleteTrash } = useNotes({ viewport })
 
   // 到点系统通知（桌面版）
   useReminders(notes)
@@ -200,16 +207,16 @@ export default function App() {
   )
 
   // 自动整理：一屏收纳（lib 布局纯函数产补丁）——原尺寸放不下时等比缩小，
-  // 触宽度下限回退续排；画布放不下仍可滚动（现状回退行为）
+  // 触宽度下限回退续排；画布放不下仍可滚动（现状回退行为）；视口用有效口径（#52）
   const tidyNotes = useCallback(() => {
     const patches = tidyLayout(
       notes.map((n) => ({ id: n.id, width: n.width, height: n.height, collapsed: n.collapsed, z: n.z })),
-      { width: window.innerWidth, height: window.innerHeight },
+      viewport,
     )
     for (const p of patches) updateNote(p.id, p)
     // 整理完回到左上角
     scrollRef.current?.scrollTo({ top: 0, left: 0 })
-  }, [notes, updateNote])
+  }, [notes, updateNote, viewport])
 
   // 菜单栏逾期/今天到期的任务数（点击打开侧栏任务页）
   const dueTaskCount = useMemo(
@@ -264,8 +271,13 @@ export default function App() {
         onSelectCategory={setSelectedCategory}
       />
 
-      {/* 滚动桌面：便签拖出视口时画布扩展、出现滚动条（分类筛选下只渲染可见便签） */}
-      <div ref={scrollRef} className="desktop-scroll absolute inset-x-0 top-7 bottom-0 overflow-auto">
+      {/* 滚动桌面：便签拖出视口时画布扩展、出现滚动条（分类筛选下只渲染可见便签）。
+          固定侧栏时左移让位（#52）：纯视图层偏移，便签坐标不动；与侧栏滑出同节奏 200ms */}
+      <div
+        ref={scrollRef}
+        className="desktop-scroll absolute top-7 bottom-0 right-0 overflow-auto transition-[left] duration-200 ease-out"
+        style={{ left: sidebarPinned ? SIDEBAR_W : 0 }}
+      >
         <div ref={canvasRef} className="relative" style={{ width: canvasSize.width, height: canvasSize.height }}>
           {canvasNotes.map((note) => (
             <StickyNote
@@ -278,6 +290,7 @@ export default function App() {
               reveal={reveal && reveal.noteId === note.id ? reveal : null}
               flashing={flashId === note.id}
               snapTargets={geometries}
+              viewport={viewport}
               categories={categories}
               scrollRef={scrollRef}
               canvasRef={canvasRef}

@@ -5,6 +5,9 @@
 /** 菜单栏高度（滚动层起始 y；maximize 的 innerHeight−60 即 28+上下边距 16×2；
  *  与 CSS 侧 top-7 / h-7 跨语言手工同步） */
 export const MENU_BAR_H = 28
+/** 固定侧栏宽度（#52）：滚动容器左移量与 Sidebar 宽同一常量——推开偏移、
+ *  有效视口宽、侧栏自身样式三处消费，不写副本 */
+export const SIDEBAR_W = 232
 /** 画布随最远便签边缘扩展的边距（滚动条出现前留白；App 画布尺寸与拖动撑大同源） */
 export const CANVAS_PAD = 24
 /** 拖动吸附判定距离：距候选线 ≤ 此值即吸上 */
@@ -245,6 +248,13 @@ export function findSpawnSpot(opts: {
     }
   }
   return preferred
+}
+
+/** 有效视口（#52）：固定侧栏推开画布后，便签可占据的窗口区域——几何计算
+ *  （画布尺寸 / 整理 / 出生 / 最大化）的宽度口径单源，App 派生后下发各消费点。
+ *  极窄窗口 clamp 到 0（负宽对几何计算无意义） */
+export function effectiveViewport(win: Size, sidebarPinned: boolean): Size {
+  return { width: Math.max(0, win.width - (sidebarPinned ? SIDEBAR_W : 0)), height: win.height }
 }
 
 /** 画布尺寸：至少铺满视口（扣除菜单栏高），随最远便签边缘 + CANVAS_PAD 扩展（滚动条由此出现）。

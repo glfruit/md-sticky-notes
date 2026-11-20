@@ -7,6 +7,7 @@ import { deriveTitle, extractTags, collectCategories, filterByCategory, category
 import { formatUpdatedAt } from '@/lib/datetime'
 import { extractTasks, TASK_STATUS_META, dueUrgency, DUE_LEVEL_COLORS } from '@/lib/taskLines'
 import { groupTasks, TASK_GROUP_META } from '@/lib/taskGroups'
+import { SIDEBAR_W } from '@/lib/layout'
 
 interface Props {
   notes: StickyNoteData[]
@@ -311,8 +312,8 @@ export function Sidebar({
 
   return (
     <div
-      className="fixed left-0 top-7 bottom-0 w-[232px] z-[9998] flex flex-col bg-white/70 backdrop-blur-xl border-r border-stone-900/10 shadow-xl transition-transform duration-200 ease-out"
-      style={{ transform: visible ? 'translateX(0)' : 'translateX(-100%)' }}
+      className="fixed left-0 top-7 bottom-0 z-[9998] flex flex-col bg-white/70 backdrop-blur-xl border-r border-stone-900/10 shadow-xl transition-transform duration-200 ease-out"
+      style={{ width: SIDEBAR_W, transform: visible ? 'translateX(0)' : 'translateX(-100%)' }}
       onPointerLeave={onHoverLeave}
     >
       <div className="flex items-center px-3 h-9 border-b border-stone-900/10 shrink-0">

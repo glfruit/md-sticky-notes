@@ -8,6 +8,7 @@ import {
   pinnedRects,
   clampIntoScrollArea,
   NEW_NOTE_SIZE,
+  type Size,
 } from '@/lib/layout'
 import {
   mergeNotes,
@@ -28,7 +29,7 @@ const SEED_KEY = 'md-sticky-notes:seeded'
 let idCounter = 0
 const genId = () => `note-${Date.now().toString(36)}-${(idCounter++).toString(36)}`
 
-export function useNotes() {
+export function useNotes(opts: { viewport?: Size } = {}) {
   const [notes, setNotes] = useState<StickyNoteData[]>([])
   const [trash, setTrash] = useState<StickyNoteData[]>([])
   const [loaded, setLoaded] = useState(false)
@@ -39,6 +40,10 @@ export function useNotes() {
   // state 的同步镜像：让各操作在 updater 外读取最新值、把副作用收敛到一处
   const notesRef = useRef<StickyNoteData[]>([])
   const trashRef = useRef<StickyNoteData[]>([])
+  // 有效视口镜像（#52）：addNote 依赖数组保持稳定（避免下游 effect 随 pin 切换重挂），
+  // 出生定位每调用读最新值
+  const viewportRef = useRef(opts.viewport)
+  viewportRef.current = opts.viewport
   const saveTimers = useRef(new Map<string, { timer: number; note: StickyNoteData }>())
 
   const applyNotes = useCallback((next: StickyNoteData[]) => {
@@ -119,7 +124,9 @@ export function useNotes() {
       const spot = findSpawnSpot({
         occupied: pinnedRects(notesRef.current),
         size: NEW_NOTE_SIZE,
-        viewport: { width: window.innerWidth, height: window.innerHeight },
+        // 有效视口（#52，App 单源下发）：固定侧栏推开画布时出生定位避开侧栏区；
+        // 未供给时回退窗口实测（独立使用 / 测试）
+        viewport: viewportRef.current ?? { width: window.innerWidth, height: window.innerHeight },
         start: count,
       })
       const note: StickyNoteData = {

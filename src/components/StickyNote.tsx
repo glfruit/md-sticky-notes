@@ -8,7 +8,7 @@ import { exportNote } from '@/lib/export'
 import { cleanupMarkdown } from '@/lib/editor'
 import { setTaskAtIndex, setTaskPriority, archiveCompletedTasks, convertListItemToTask, convertTaskToListItem, extractTasks, taskProgress, TASK_STATUS_META, PRIORITY_META, type PriorityMark } from '@/lib/taskLines'
 import type { TaskStatus } from '@/lib/taskLines'
-import type { NoteGeometry } from '@/lib/layout'
+import type { NoteGeometry, Size } from '@/lib/layout'
 import { useNoteEditor } from '@/hooks/useNoteEditor'
 import { useNoteDrag } from '@/hooks/useNoteDrag'
 import { useNotePreview } from '@/hooks/useNotePreview'
@@ -29,6 +29,8 @@ interface Props {
   flashing?: boolean
   /** 全部便签的几何信息（拖动吸附用，内部排除自身） */
   snapTargets?: NoteGeometry[]
+  /** 有效视口（#52，App 单源）：最大化占位计算用，固定侧栏时按收窄口径 */
+  viewport?: Size
   /** 全库分类清单（指定分类 popover 的候选 chips） */
   categories?: string[]
   /** 桌面滚动层：拖动坐标换算 / 边缘自动滚动 */
@@ -47,6 +49,7 @@ export const StickyNote = memo(function StickyNote({
   reveal,
   flashing,
   snapTargets,
+  viewport,
   categories,
   scrollRef,
   canvasRef,
@@ -84,6 +87,7 @@ export const StickyNote = memo(function StickyNote({
     snapTargets,
     scrollRef,
     canvasRef,
+    viewport,
     onUpdate,
     onFocus,
   })
