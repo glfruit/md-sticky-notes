@@ -1,11 +1,22 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Pin, PinOff, Plus, Trash2, StickyNote, ListChecks, FolderOpen, Hash } from 'lucide-react'
+import { Check, ChevronDown, Pin, PinOff, Plus, Trash2, StickyNote, ListChecks, FolderOpen, Hash } from 'lucide-react'
 import { FilterMenuButton } from './FilterMenuButton'
+import { Menu, MenuItem } from './Menu'
 import type { StickyNoteData } from '@/types/note'
 import { NOTE_COLORS } from '@/types/note'
 import { deriveTitle, extractTags, collectCategories, filterByCategory, categoryFilterOptions } from '@/lib/note'
 import { formatUpdatedAt } from '@/lib/datetime'
-import { extractTasks, TASK_STATUS_META, dueUrgency, DUE_LEVEL_COLORS } from '@/lib/taskLines'
+import {
+  extractTasks,
+  TASK_STATUS_META,
+  dueUrgency,
+  DUE_LEVEL_COLORS,
+  cycleTaskAtIndex,
+  setTaskPriority,
+  stripPriority,
+  PRIORITY_META,
+  type TaskEntry,
+} from '@/lib/taskLines'
 import { groupTasks, TASK_GROUP_META } from '@/lib/taskGroups'
 
 interface Props {
@@ -20,6 +31,8 @@ interface Props {
   onHoverLeave: () => void
   onRestore: (id: string) => void
   onPermanentDelete: (id: string) => void
+  /** 任务行直改（#53）：状态循环 / 优先级设置，与便签同一条保存管线（updateNote） */
+  onUpdate: (id: string, patch: Partial<StickyNoteData>) => void
   /** 分类筛选（#41）：选中属主在 App（同时驱动画布过滤），null=全部、''=无分类 */
   selectedCategory: string | null
   onSelectCategory: (c: string | null) => void
@@ -101,13 +114,116 @@ function NoteRow({
   )
 }
 
+/** 侧栏任务行（#53）：状态圆点点击循环五态（与预览 checkbox 同序 CYCLE）、
+ *  行尾优先级 chip 开 Menu（🔥/⚡/🐢/清除，与便签内 ▾ 菜单同款选项）；
+ *  行主体点击仍跳便签。行是容器 + 内嵌按钮结构（嵌套 button 非法）。
+ *  状态/优先级写回走 onUpdate 同一条保存管线（cycleTaskAtIndex / setTaskPriority 纯函数，
+ *  🔁 重复任务完成重置已在函数内处理）；置完成/废弃后行随过滤即时消失（票面确认）。 */
+function TaskRow({
+  note,
+  task,
+  onSelect,
+  onUpdate,
+}: {
+  note: StickyNoteData
+  task: TaskEntry
+  onSelect: (id: string) => void
+  onUpdate: (id: string, patch: Partial<StickyNoteData>) => void
+}) {
+  const [menuPos, setMenuPos] = useState<{ x: number; y: number } | null>(null)
+  const urgency = task.due ? dueUrgency(task.due) : null
+  const applyContent = (next: string | null) => {
+    if (next !== null) onUpdate(note.id, { content: next })
+  }
+
+  return (
+    <div className="group flex items-center gap-2 px-3 py-1.5 hover:bg-black/5 transition-colors">
+      <button
+        className="p-0.5 -m-0.5 rounded shrink-0 hover:bg-black/10"
+        onClick={() => applyContent(cycleTaskAtIndex(note.content, task.index))}
+        title={`状态：${TASK_STATUS_META[task.status].label}（点击切换）`}
+        aria-label={`切换任务状态，当前${TASK_STATUS_META[task.status].label}`}
+      >
+        <span
+          className="block w-2 h-2 rounded-full"
+          style={{ backgroundColor: TASK_STATUS_META[task.status].color }}
+        />
+      </button>
+      <button
+        className="min-w-0 flex-1 text-left text-[12px] text-black/70 truncate"
+        onClick={() => onSelect(note.id)}
+        title={`${deriveTitle(note.content)} · ${TASK_STATUS_META[task.status].label}`}
+      >
+        {task.text.includes('🔁') && <span title="重复任务">🔁 </span>}
+        {stripPriority(task.text) || '（空任务）'}
+      </button>
+      {urgency && (
+        <span
+          className="shrink-0 text-[10px] font-medium px-1 rounded"
+          style={{
+            color: DUE_LEVEL_COLORS[urgency.level],
+            backgroundColor: DUE_LEVEL_COLORS[urgency.level] + '1a',
+          }}
+        >
+          {urgency.label}
+        </span>
+      )}
+      <button
+        // 菜单开着时也保持可见（backdrop 盖住按钮，此处只在关闭态可达——FilterMenuButton 同款）
+        className={`shrink-0 w-4 h-4 rounded text-[11px] leading-none text-black/60 hover:bg-black/10 transition-opacity ${
+          task.priority || menuPos ? '' : 'opacity-0 group-hover:opacity-100'
+        }`}
+        onClick={(e) => {
+          const r = e.currentTarget.getBoundingClientRect()
+          setMenuPos({ x: r.left, y: r.bottom + 4 })
+        }}
+        title="设置优先级"
+        aria-label="设置优先级"
+      >
+        {task.priority ?? <ChevronDown size={11} className="mx-auto" />}
+      </button>
+      {menuPos && (
+        <Menu x={menuPos.x} y={menuPos.y} onClose={() => setMenuPos(null)}>
+          {PRIORITY_META.map((p) => (
+            <MenuItem
+              key={p.mark}
+              icon={<span className="text-[12px] leading-none w-3.5 text-center shrink-0">{p.mark}</span>}
+              onClick={() => {
+                applyContent(setTaskPriority(note.content, task.index, p.mark))
+                setMenuPos(null)
+              }}
+            >
+              {p.label}
+              {task.priority === p.mark && <Check size={12} className="ml-auto text-black/45" />}
+            </MenuItem>
+          ))}
+          <MenuItem
+            muted
+            icon={
+              <span className="text-[10px] leading-none w-3.5 text-center shrink-0 text-black/30">—</span>
+            }
+            onClick={() => {
+              applyContent(setTaskPriority(note.content, task.index, null))
+              setMenuPos(null)
+            }}
+          >
+            无优先级
+          </MenuItem>
+        </Menu>
+      )}
+    </div>
+  )
+}
+
 /** 侧栏任务：按 进行中 → 快过期/逾期 → 等待 → 待办 分组，组内按截止日期升序，临期标红 */
 function TaskList({
   notes,
   onSelect,
+  onUpdate,
 }: {
   notes: StickyNoteData[]
   onSelect: (id: string) => void
+  onUpdate: (id: string, patch: Partial<StickyNoteData>) => void
 }) {
   const groups = useMemo(
     () =>
@@ -133,37 +249,15 @@ function TaskList({
             <span className="text-[10px] font-semibold text-black/45">{TASK_GROUP_META[group].label}</span>
             <span className="text-[10px] text-black/30">{rows.length}</span>
           </div>
-          {rows.map(({ note, task }) => {
-            const urgency = task.due ? dueUrgency(task.due) : null
-            return (
-              <button
-                key={`${note.id}-${task.index}`}
-                className="w-full flex items-center gap-2 px-3 py-1.5 text-left hover:bg-black/5 transition-colors"
-                onClick={() => onSelect(note.id)}
-                title={`${deriveTitle(note.content)} · ${TASK_STATUS_META[task.status].label}`}
-              >
-                <span
-                  className="w-2 h-2 rounded-full shrink-0"
-                  style={{ backgroundColor: TASK_STATUS_META[task.status].color }}
-                />
-                <span className="min-w-0 flex-1 text-[12px] text-black/70 truncate">
-                  {task.text.includes('🔁') && <span title="重复任务">🔁 </span>}
-                  {task.text || '（空任务）'}
-                </span>
-                {urgency && (
-                  <span
-                    className="shrink-0 text-[10px] font-medium px-1 rounded"
-                    style={{
-                      color: DUE_LEVEL_COLORS[urgency.level],
-                      backgroundColor: DUE_LEVEL_COLORS[urgency.level] + '1a',
-                    }}
-                  >
-                    {urgency.label}
-                  </span>
-                )}
-              </button>
-            )
-          })}
+          {rows.map(({ note, task }) => (
+            <TaskRow
+              key={`${note.id}-${task.index}`}
+              note={note}
+              task={task}
+              onSelect={onSelect}
+              onUpdate={onUpdate}
+            />
+          ))}
         </div>
       ))}
     </>
@@ -250,6 +344,7 @@ export function Sidebar({
   onHoverLeave,
   onRestore,
   onPermanentDelete,
+  onUpdate,
   selectedCategory,
   onSelectCategory,
 }: Props) {
@@ -384,7 +479,7 @@ export function Sidebar({
             ))}
           </>
         )}
-        {tab === 'tasks' && <TaskList notes={notes} onSelect={onSelect} />}
+        {tab === 'tasks' && <TaskList notes={notes} onSelect={onSelect} onUpdate={onUpdate} />}
         {tab === 'trash' && (
           <TrashList trash={trash} onRestore={onRestore} onPermanentDelete={onPermanentDelete} />
         )}
