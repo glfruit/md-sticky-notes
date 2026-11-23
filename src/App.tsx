@@ -372,7 +372,7 @@ export default function App() {
                 focusTransform={focusView}
               />
             )
-          })} (便签聚焦模式：右键聚焦后其余便签隐藏、目标居中放大（#54）：lib/layout 新增 focusTransform 纯函数（scale 基准 1.25 钳制完整可见、dx/dy 画布坐标视觉平移计入当前滚动，先测后码 5 用例）；App 层 focusId 瞬态（不落盘），渲染期 useMemo 稳定引用，渲染分支隐藏其余便签（含置顶）、聚焦中分类筛掉目标补渲染；右键菜单加「聚焦」项；聚焦态冻结拖动/缩放/折叠/最大化（StickyNote focusTransform prop），内容交互保留；退出通道 Esc（isMenuOpen/searchOpen/storageOpen 让位）+ 点空白层 + 删除自退 + 新建/侧栏选中/搜索跳转其它便签自动退出；评审修正：互斥登记下沉 lib/menu 单源（react-refresh 组件文件不导出函数）、prop 改名 focusTransform 避与 onFocus 同名异义、FocusTransform 类型导出复用、CONTEXT.md 收录聚焦模式词条)
+          })}
         </div>
       </div>
 
